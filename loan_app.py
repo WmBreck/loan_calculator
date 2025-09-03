@@ -10,42 +10,65 @@ import json
 import os
 
 # Persistent storage functions
+def _to_records(df: pd.DataFrame) -> list[dict]:
+    if df is None or df.empty:
+        return []
+    out = df.copy()
+    # ensure JSON-friendly types
+    out["Date"] = pd.to_datetime(out["Date"], errors="coerce").dt.date.astype(str)
+    out["Amount"] = pd.to_numeric(out["Amount"], errors="coerce")
+    return out.to_dict("records")
+
 def save_data():
-    """Save all loan data to JSON file"""
     data_to_save = {
-        "loans": st.session_state.loans,
+        "loans": {},
         "current_loan": st.session_state.current_loan
     }
-    
-    # Convert DataFrames to JSON-serializable format
-    for loan_name, loan_data in data_to_save["loans"].items():
-        if "payments_df" in loan_data and not loan_data["payments_df"].empty:
-            loan_data["payments_df"] = loan_data["payments_df"].to_dict("records")
-        else:
-            loan_data["payments_df"] = []
-    
+    for name, loan in st.session_state.loans.items():
+        data_to_save["loans"][name] = {
+            "principal": float(loan["principal"]),
+            # store as ISO date string
+            "origination_date": str(loan["origination_date"]),
+            # store as numeric percentage
+            "annual_rate": float(loan["annual_rate"]),
+            "term_years": int(loan["term_years"]),
+            "payments_df": _to_records(loan.get("payments_df", pd.DataFrame(columns=["Date","Amount"])))
+        }
     with open("loan_data.json", "w") as f:
-        json.dump(data_to_save, f, default=str, indent=2)
+        json.dump(data_to_save, f, indent=2)
 
 def load_data():
-    """Load loan data from JSON file"""
-    if os.path.exists("loan_data.json"):
-        try:
-            with open("loan_data.json", "r") as f:
-                data = json.load(f)
-            
-            # Convert JSON data back to DataFrames
-            for loan_name, loan_data in data["loans"].items():
-                if "payments_df" in loan_data and loan_data["payments_df"]:
-                    loan_data["payments_df"] = pd.DataFrame(loan_data["payments_df"])
-                else:
-                    loan_data["payments_df"] = pd.DataFrame(columns=["Date", "Amount"])
-            
-            return data
-        except Exception as e:
-            st.error(f"Error loading saved data: {e}")
-            return None
-    return None
+    if not os.path.exists("loan_data.json"):
+        return None
+    try:
+        with open("loan_data.json", "r") as f:
+            data = json.load(f)
+
+        # restore types
+        for name, loan in data["loans"].items():
+            # origination_date back to date
+            od = pd.to_datetime(loan.get("origination_date"), errors="coerce")
+            loan["origination_date"] = od.date() if od is not None and not pd.isna(od) else date.today()
+
+            # ensure numerics
+            loan["principal"] = float(loan.get("principal", 0))
+            loan["annual_rate"] = float(loan.get("annual_rate", 0))  # still stored as percent
+            loan["term_years"] = int(loan.get("term_years", 1))
+
+            # payments dataframe
+            rows = loan.get("payments_df", [])
+            if rows:
+                df = pd.DataFrame(rows)
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
+                loan["payments_df"] = df.dropna(subset=["Date","Amount"]).reset_index(drop=True)
+            else:
+                loan["payments_df"] = pd.DataFrame(columns=["Date", "Amount"])
+
+        return data
+    except Exception as e:
+        st.error(f"Error loading saved data: {e}")
+        return None
 
 # ============================================================================
 # CRITICAL SECTION: App Configuration and Validation
@@ -53,7 +76,7 @@ def load_data():
 # DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
 # ============================================================================
 
-st.set_page_config(page_title="Loan Payment Calculator", page_icon="", layout="centered")
+st.set_page_config(page_title="Loan Payment Calculator", page_icon="💸", layout="centered")
 
 # Feature validation function
 def validate_critical_features():
@@ -175,14 +198,13 @@ with col3:
 current_loan_data = st.session_state.loans[current_loan]
 
 # Debug mode toggle (for administrators)
-if st.button("🔧 Display Debugging Information", key="debug_toggle"):
-    st.session_state.show_debug = not st.session_state.show_debug
+st.session_state.show_debug = st.checkbox("🔧 Display Debugging Information", value=st.session_state.get("show_debug", False), key="debug_toggle")
 
 if st.session_state.get("show_debug", False):
     st.success("🔧 Debug mode: ON")
     st.info("Debug information will be displayed below when processing payments.")
 else:
-    st.info("🔧 Debug mode: OFF - Click button above to enable debugging information.")
+    st.info("🔧 Debug mode: OFF - Check the box above to enable debugging information.")
 
 with st.sidebar:
     st.header("Loan Terms")
@@ -235,29 +257,35 @@ with col2:
     new_payment_amount = st.number_input("Payment Amount ($)", min_value=0.01, value=100.0, step=10.0, format="%.2f", key="new_payment_amount")
 
 if st.button("Enter New Payment", type="primary"):
-    # Create new payment row
-    new_payment = pd.DataFrame({
-        "Date": [new_payment_date],
-        "Amount": [new_payment_amount]
-    })
-    
-    # Ensure we have a DataFrame for the current payments
-    payments_df = current_loan_data["payments_df"]
-    if isinstance(payments_df, list):
-        payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
-    
-    # Add new payment and sort by date
-    payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
-    payments_df = payments_df.sort_values("Date").reset_index(drop=True)
-    
-    # Update the loan data
-    current_loan_data["payments_df"] = payments_df
-    save_data()
-    
-    st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
-    
-    # Auto-recalculate the schedule
-    st.rerun()
+    # Input validation
+    if new_payment_amount <= 0:
+        st.error("❌ Payment amount must be greater than $0.00")
+    elif new_payment_date < current_loan_data["origination_date"]:
+        st.error(f"❌ Payment date cannot be before loan origination date ({current_loan_data['origination_date'].strftime('%m/%d/%Y')})")
+    else:
+        # Create new payment row
+        new_payment = pd.DataFrame({
+            "Date": [new_payment_date],
+            "Amount": [new_payment_amount]
+        })
+        
+        # Ensure we have a DataFrame for the current payments
+        payments_df = current_loan_data["payments_df"]
+        if isinstance(payments_df, list):
+            payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
+        
+        # Add new payment and sort by date
+        payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
+        payments_df = payments_df.sort_values("Date").reset_index(drop=True)
+        
+        # Update the loan data
+        current_loan_data["payments_df"] = payments_df
+        save_data()
+        
+        st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
+        
+        # Auto-recalculate the schedule
+        st.rerun()
 
 st.subheader("Payment History")
 st.caption("Edit payments below or use the CSV upload above to add multiple payments at once.")
@@ -508,6 +536,9 @@ Assumptions:
                 monthly_rows.append({"Month End": eom, "Principal Balance": bal})
             
             cur = nm
+    else:
+        # No payments - create empty monthly table
+        monthly_rows = []
 
     dfm = pd.DataFrame(monthly_rows)
     dfm["Month End"] = pd.to_datetime(dfm["Month End"]).dt.strftime("%Y-%m-%d")
