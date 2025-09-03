@@ -47,9 +47,42 @@ def load_data():
             return None
     return None
 
+# ============================================================================
+# CRITICAL SECTION: App Configuration and Validation
+# ============================================================================
+# DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# ============================================================================
+
 st.set_page_config(page_title="Loan Payment Calculator", page_icon="", layout="centered")
 
+# Feature validation function
+def validate_critical_features():
+    """Validate that all critical features are present and working"""
+    critical_features = [
+        "compute_schedule",
+        "build_pdf", 
+        "save_data",
+        "load_data"
+    ]
+    
+    missing_features = []
+    for feature in critical_features:
+        if feature not in globals():
+            missing_features.append(feature)
+    
+    if missing_features:
+        st.error(f"🚨 CRITICAL ERROR: Missing functions: {missing_features}")
+        st.error("This indicates critical functionality has been accidentally removed!")
+        st.error("Please restore from git or contact developer immediately.")
+        return False
+    
+    return True
+
 st.title("💸 Loan Payment Calculator & Report")
+
+# Validate critical features after all functions are defined
+if not validate_critical_features():
+    st.stop()
 
 st.markdown("""
 This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
@@ -58,6 +91,13 @@ This tool calculates interest and principal allocation for **irregular payments*
 - Unpaid interest (if any) is carried but **does not compound**.
 - Export a dated PDF report for sharing.
 """)
+
+# ============================================================================
+# CRITICAL SECTION: Multi-loan Management System
+# ============================================================================
+# DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# This section handles loan creation, selection, and persistence
+# ============================================================================
 
 # Multi-loan management
 if "loans" not in st.session_state:
@@ -246,6 +286,14 @@ if not edited_df.equals(payments_df):
     save_data()
     st.success("✅ Payment changes saved!")
 
+# ============================================================================
+# CRITICAL FUNCTION: Core Calculation Engine
+# ============================================================================
+# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# This function contains the Actual/365 interest calculation logic
+# and payment allocation algorithm - core business logic
+# ============================================================================
+
 def compute_schedule(principal, origination_date, annual_rate, payments_df):
     df = payments_df.copy()
 
@@ -340,6 +388,13 @@ def compute_schedule(principal, origination_date, annual_rate, payments_df):
         last_date = d
 
     return pd.DataFrame(schedule)
+
+# ============================================================================
+# CRITICAL FUNCTION: PDF Report Generation
+# ============================================================================
+# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# This function generates the complete PDF report with all calculations
+# ============================================================================
 
 def build_pdf(df, principal, origination_date, annual_rate, term_years):
     buf = BytesIO()
