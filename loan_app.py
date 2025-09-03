@@ -364,27 +364,27 @@ if not edited_df.equals(payments_df):
 
 def compute_schedule(principal, origination_date, annual_rate, payments_df):
     # Use centralized cleaning function
-    df = clean_payments_df(payments_df)
+    cleaned_df = clean_payments_df(payments_df)
 
     # ---- DEBUG (conditional display) ----
     if st.session_state.get("show_debug", False):
         st.text(f"Debug - Original payments count: {len(payments_df)}")
-        st.text(f"Debug - After cleaning count: {len(df)}")
-        if not df.empty:
-            st.write("Debug - After cleaning (head):", df.head())
+        st.text(f"Debug - After cleaning count: {len(cleaned_df)}")
+        if not cleaned_df.empty:
+            st.write("Debug - After cleaning (head):", cleaned_df.head())
 
     # --- Filter out payments before origination date ---
     if st.session_state.get("show_debug", False):
         st.text(f"Debug - Origination date: {origination_date} ({type(origination_date).__name__})")
-    df = df[df["Date"] >= origination_date]
+    filtered_df = cleaned_df[cleaned_df["Date"] >= origination_date]
 
     if st.session_state.get("show_debug", False):
-        st.text(f"Debug - After filtering count: {len(df)}")
-        if not df.empty:
-            st.write("Debug - After filtering (head):", df.head())
+        st.text(f"Debug - After filtering count: {len(filtered_df)}")
+        if not filtered_df.empty:
+            st.write("Debug - After filtering (head):", filtered_df.head())
 
     # --- Core schedule calculation (Actual/365 simple interest) ---
-    df = df.sort_values("Date")
+    df = filtered_df.sort_values("Date")
     schedule = []
     bal = round(float(principal), 2)
     last_date = origination_date
