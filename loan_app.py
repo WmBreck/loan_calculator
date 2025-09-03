@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import json
 import os
+import secrets
+import hashlib
+from urllib.parse import urlencode
 
 # Persistent storage functions
 def _to_records(df: pd.DataFrame) -> list[dict]:
@@ -32,7 +35,10 @@ def save_data():
             # store as numeric percentage
             "annual_rate": float(loan["annual_rate"]),
             "term_years": int(loan["term_years"]),
-            "payments_df": _to_records(loan.get("payments_df", pd.DataFrame(columns=["Date","Amount"])))
+            "payments_df": _to_records(loan.get("payments_df", pd.DataFrame(columns=["Date","Amount"]))),
+            "lender": str(loan.get("lender", "Your Company")),
+            "borrower": str(loan.get("borrower", "Borrower Name")),
+            "borrower_token": str(loan.get("borrower_token", generate_secure_token()))
         }
     with open("loan_data.json", "w") as f:
         json.dump(data_to_save, f, indent=2)
@@ -54,6 +60,11 @@ def load_data():
             loan["principal"] = float(loan.get("principal", 0))
             loan["annual_rate"] = float(loan.get("annual_rate", 0))  # still stored as percent
             loan["term_years"] = int(loan.get("term_years", 1))
+
+            # ensure string fields
+            loan["lender"] = str(loan.get("lender", "Your Company"))
+            loan["borrower"] = str(loan.get("borrower", "Borrower Name"))
+            loan["borrower_token"] = str(loan.get("borrower_token", generate_secure_token()))
 
             # payments dataframe
             rows = loan.get("payments_df", [])
@@ -100,6 +111,81 @@ def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 # ============================================================================
+# CRITICAL SECTION: Authentication and Role Management
+# ============================================================================
+# DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# ============================================================================
+
+def generate_secure_token():
+    """Generate a secure random token for borrower access"""
+    return secrets.token_urlsafe(32)
+
+def hash_password(password):
+    """Hash a password for secure storage"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed):
+    """Verify a password against its hash"""
+    return hash_password(password) == hashed
+
+def create_borrower_link(loan_name, token):
+    """Create a secure borrower access link"""
+    params = urlencode({
+        'loan': loan_name,
+        'token': token,
+        'role': 'borrower'
+    })
+    return f"?{params}"
+
+def check_authentication():
+    """Check if user is authenticated and determine role"""
+    # Check URL parameters for borrower access
+    params = st.experimental_get_query_params()
+    loan_name = params.get('loan', [None])[0]
+    token = params.get('token', [None])[0]
+    role = params.get('role', [None])[0]
+    
+    if role == 'borrower' and loan_name and token:
+        # Verify borrower token
+        if loan_name in st.session_state.get('loans', {}) and \
+           st.session_state.loans[loan_name].get('borrower_token') == token:
+            return 'borrower', loan_name
+        else:
+            st.error("Invalid or expired borrower access link")
+            st.stop()
+    
+    # Check if lender is authenticated
+    if 'lender_authenticated' not in st.session_state:
+        return 'unauthenticated', None
+    
+    return 'lender', None
+
+def lender_login():
+    """Handle lender login"""
+    with st.sidebar:
+        st.header("🔐 Lender Authentication")
+        
+        if 'lender_authenticated' not in st.session_state:
+            st.session_state.lender_authenticated = False
+        
+        if not st.session_state.lender_authenticated:
+            password = st.text_input("Lender Password", type="password")
+            if st.button("Login"):
+                # For demo purposes, use a simple password
+                # In production, this should be stored securely
+                if password == "lender123":
+                    st.session_state.lender_authenticated = True
+                    st.success("✅ Lender authenticated!")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid password")
+        else:
+            st.success("✅ Authenticated as Lender")
+            if st.button("Logout"):
+                st.session_state.lender_authenticated = False
+                st.rerun()
+
+# ============================================================================
 # CRITICAL SECTION: App Configuration and Validation
 # ============================================================================
 # DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
@@ -130,7 +216,84 @@ def validate_critical_features():
     
     return True
 
-st.title("💸 Loan Payment Calculator & Report")
+# Check authentication and determine user role
+user_role, loan_name = check_authentication()
+
+if user_role == 'unauthenticated':
+    # Show lender login
+    lender_login()
+    st.title("💸 Loan Payment Calculator & Report")
+    st.info("🔐 Please authenticate as a lender to access loan management features.")
+    st.stop()
+
+elif user_role == 'borrower':
+    # Borrower view - read only
+    st.title("📋 Loan Statement - Borrower View")
+    st.info(f"🔗 Viewing loan: {loan_name}")
+    st.warning("📖 This is a read-only view. Contact your lender for any changes.")
+    
+    # Load loan data for borrower
+    if "loans" not in st.session_state:
+        saved_data = load_data()
+        if saved_data and loan_name in saved_data["loans"]:
+            st.session_state.loans = saved_data["loans"]
+        else:
+            st.error("Loan not found or access denied")
+            st.stop()
+    
+    current_loan_data = st.session_state.loans[loan_name]
+    
+    # Show borrower information
+    with st.sidebar:
+        st.header("📋 Loan Information")
+        st.metric("Principal", f"${current_loan_data['principal']:,.2f}")
+        st.metric("Interest Rate", f"{current_loan_data['annual_rate']:.3f}%")
+        st.metric("Origination Date", current_loan_data['origination_date'].strftime('%m/%d/%Y'))
+        st.metric("Term", f"{current_loan_data['term_years']} years")
+        
+        # Show current status
+        if not current_loan_data['payments_df'].empty:
+            last_payment = current_loan_data['payments_df'].iloc[-1]
+            days_since = (date.today() - last_payment['Date']).days
+            st.metric("Days Since Last Payment", days_since)
+            st.metric("Last Payment", f"${last_payment['Amount']:.2f}")
+    
+    # Calculate and show schedule for borrower
+    if st.button("Calculate & Show Tables", type="primary"):
+        df = compute_schedule(
+            current_loan_data["principal"],
+            current_loan_data["origination_date"],
+            current_loan_data["annual_rate"],
+            current_loan_data["payments_df"]
+        )
+        
+        if not df.empty:
+            st.subheader("Payment Schedule")
+            st.dataframe(df, use_container_width=True)
+            
+            # PDF export for borrower
+            if st.button("📄 Export PDF Report"):
+                pdf_bytes = build_pdf(
+                    df, 
+                    current_loan_data["principal"],
+                    current_loan_data["origination_date"],
+                    current_loan_data["annual_rate"],
+                    current_loan_data["term_years"]
+                )
+                st.download_button(
+                    label="📥 Download PDF Report",
+                    data=pdf_bytes,
+                    file_name=f"loan_statement_{loan_name}_{date.today().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf"
+                )
+        else:
+            st.warning("No payment data available")
+    
+    st.stop()
+
+else:
+    # Lender view - full access
+    st.title("💸 Loan Payment Calculator & Report")
 
 st.markdown("""
 This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
@@ -169,7 +332,10 @@ if "loans" not in st.session_state:
                 "origination_date": date(2023, 8, 31),
                 "annual_rate": 5.0,
                 "term_years": 15,
-                "payments_df": pd.DataFrame(columns=["Date", "Amount"])
+                "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
+                "lender": "Your Company",
+                "borrower": "Beth",
+                "borrower_token": generate_secure_token()
             }
         }
         st.session_state.current_loan = "Loan to Beth"
@@ -216,7 +382,10 @@ with col2:
             "origination_date": date.today(),
             "annual_rate": 5.0,
             "term_years": 30,
-            "payments_df": pd.DataFrame(columns=["Date", "Amount"])
+            "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
+            "lender": "Your Company",
+            "borrower": "Borrower Name",
+            "borrower_token": generate_secure_token()
         }
         st.session_state.current_loan = new_loan_name
         save_data()
@@ -249,14 +418,38 @@ with st.sidebar:
     annual_rate = st.number_input("Interest Rate (APR %)", min_value=0.0, value=current_loan_data["annual_rate"], step=0.1, format="%.3f") / 100.0
     term_years = st.number_input("Loan Term (years)", min_value=1, value=current_loan_data["term_years"], step=1)
     
+    # Lender and Borrower information
+    st.header("Parties")
+    lender = st.text_input("Lender", value=current_loan_data.get("lender", "Your Company"))
+    borrower = st.text_input("Borrower", value=current_loan_data.get("borrower", "Borrower Name"))
+    
     # Update loan data when sidebar values change
     current_loan_data.update({
         "principal": principal,
         "origination_date": origination_date,
         "annual_rate": annual_rate * 100,  # Store as percentage
-        "term_years": term_years
+        "term_years": term_years,
+        "lender": lender,
+        "borrower": borrower
     })
     save_data()
+    
+    # Borrower access link generation
+    st.header("🔗 Borrower Access")
+    if st.button("Generate New Borrower Link"):
+        current_loan_data["borrower_token"] = generate_secure_token()
+        save_data()
+        st.success("✅ New borrower access link generated!")
+    
+    # Display current borrower link
+    if "borrower_token" in current_loan_data:
+        base_url = st.experimental_get_query_params().get("loan", [""])[0]
+        if not base_url:
+            base_url = st.get_option("server.baseUrlPath") or "http://localhost:8501"
+        
+        borrower_link = f"{base_url}{create_borrower_link(current_loan_data['borrower'], current_loan_data['borrower_token'])}"
+        st.code(borrower_link, language="text")
+        st.caption("Share this link with the borrower for read-only access")
 
 st.subheader("Payments")
 st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
