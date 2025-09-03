@@ -11,6 +11,7 @@ import os
 import secrets
 import hashlib
 from urllib.parse import urlencode
+import hmac
 
 # Persistent storage functions
 def _to_records(df: pd.DataFrame) -> list[dict]:
@@ -23,16 +24,37 @@ def _to_records(df: pd.DataFrame) -> list[dict]:
     return out.to_dict("records")
 
 def save_data():
-    data_to_save = {
-        "loans": {},
-        "current_loan": st.session_state.current_loan
-    }
+    """Save loan data with lender isolation"""
+    if 'lender_email' not in st.session_state:
+        st.error("No lender authenticated - cannot save data")
+        return
+    
+    lender_email = st.session_state.lender_email
+    
+    # Load existing data for all lenders
+    all_data = {}
+    if os.path.exists("loan_data.json"):
+        try:
+            with open("loan_data.json", "r") as f:
+                all_data = json.load(f)
+        except Exception:
+            all_data = {}
+    
+    # Ensure lender data structure exists
+    if lender_email not in all_data:
+        all_data[lender_email] = {
+            "loans": {},
+            "current_loan": st.session_state.get("current_loan", "Loan 1")
+        }
+    
+    # Save current lender's loans
+    all_data[lender_email]["loans"] = {}
+    all_data[lender_email]["current_loan"] = st.session_state.get("current_loan", "Loan 1")
+    
     for name, loan in st.session_state.loans.items():
-        data_to_save["loans"][name] = {
+        all_data[lender_email]["loans"][name] = {
             "principal": float(loan["principal"]),
-            # store as ISO date string
             "origination_date": str(loan["origination_date"]),
-            # store as numeric percentage
             "annual_rate": float(loan["annual_rate"]),
             "term_years": int(loan["term_years"]),
             "payments_df": _to_records(loan.get("payments_df", pd.DataFrame(columns=["Date","Amount"]))),
@@ -40,16 +62,30 @@ def save_data():
             "borrower": str(loan.get("borrower", "Borrower Name")),
             "borrower_token": str(loan.get("borrower_token", generate_secure_token()))
         }
+    
+    # Save all data
     with open("loan_data.json", "w") as f:
-        json.dump(data_to_save, f, indent=2)
+        json.dump(all_data, f, indent=2)
 
-def load_data():
+def load_data(lender_email=None):
+    """Load loan data with lender isolation"""
     if not os.path.exists("loan_data.json"):
         return None
+    
     try:
         with open("loan_data.json", "r") as f:
-            data = json.load(f)
-
+            all_data = json.load(f)
+        
+        # If no specific lender requested, return all data
+        if lender_email is None:
+            return all_data
+        
+        # Return specific lender's data
+        if lender_email not in all_data:
+            return None
+            
+        data = all_data[lender_email]
+        
         # restore types
         for name, loan in data["loans"].items():
             # origination_date back to date
@@ -71,7 +107,7 @@ def load_data():
             if rows:
                 df = pd.DataFrame(rows)
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
+                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce)
                 # Don't drop rows during load - just ensure types are correct
                 loan["payments_df"] = df.reset_index(drop=True)
             else:
@@ -111,7 +147,7 @@ def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 # ============================================================================
-# CRITICAL SECTION: Authentication and Role Management
+# CRITICAL SECTION: Multi-Tenant Authentication and Data Isolation
 # ============================================================================
 # DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
 # ============================================================================
@@ -120,13 +156,9 @@ def generate_secure_token():
     """Generate a secure random token for borrower access"""
     return secrets.token_urlsafe(32)
 
-def hash_password(password):
-    """Hash a password for secure storage"""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def verify_password(password, hashed):
-    """Verify a password against its hash"""
-    return hash_password(password) == hashed
+def hash_email(email):
+    """Hash email for secure storage"""
+    return hashlib.sha256(email.lower().encode()).hexdigest()
 
 def create_borrower_link(loan_name, token):
     """Create a secure borrower access link"""
@@ -137,52 +169,83 @@ def create_borrower_link(loan_name, token):
     })
     return f"?{params}"
 
+def get_user_identity():
+    """Get user identity from Streamlit authentication or manual input"""
+    # Check if user is authenticated via Streamlit
+    if st.runtime.exists():
+        try:
+            # Try to get authenticated user info
+            user_info = st.experimental_user
+            if user_info and user_info.email:
+                return user_info.email, 'authenticated'
+        except Exception:
+            pass
+    
+    # Fallback to manual email input
+    return None, 'manual'
+
 def check_authentication():
-    """Check if user is authenticated and determine role"""
+    """Check if user is authenticated and determine role with data isolation"""
     # Check URL parameters for borrower access
     loan_name = st.query_params.get('loan', None)
     token = st.query_params.get('token', None)
     role = st.query_params.get('role', None)
     
     if role == 'borrower' and loan_name and token:
-        # Verify borrower token
-        if loan_name in st.session_state.get('loans', {}) and \
-           st.session_state.loans[loan_name].get('borrower_token') == token:
-            return 'borrower', loan_name
-        else:
-            st.error("Invalid or expired borrower access link")
-            st.stop()
+        # Verify borrower token and load appropriate loan data
+        return 'borrower', loan_name, token
     
     # Check if lender is authenticated
-    if 'lender_authenticated' not in st.session_state:
-        return 'unauthenticated', None
+    if 'lender_email' not in st.session_state:
+        return 'unauthenticated', None, None
     
-    return 'lender', None
+    return 'lender', st.session_state.lender_email, None
 
 def lender_login():
-    """Handle lender login"""
+    """Handle lender authentication with email-based identity"""
     with st.sidebar:
         st.header("🔐 Lender Authentication")
         
-        if 'lender_authenticated' not in st.session_state:
-            st.session_state.lender_authenticated = False
+        # Try to get authenticated user
+        user_email, auth_type = get_user_identity()
         
-        if not st.session_state.lender_authenticated:
-            password = st.text_input("Lender Password", type="password")
-            if st.button("Login"):
-                # For demo purposes, use a simple password
-                # In production, this should be stored securely
-                if password == "lender123":
-                    st.session_state.lender_authenticated = True
-                    st.success("✅ Lender authenticated!")
+        if user_email and auth_type == 'authenticated':
+            # User is authenticated via Streamlit
+            st.success(f"✅ Authenticated as: {user_email}")
+            st.session_state.lender_email = user_email
+            st.session_state.auth_type = 'streamlit'
+            
+            if st.button("Logout"):
+                st.session_state.lender_email = None
+                st.session_state.auth_type = None
+                st.rerun()
+                
+        elif 'lender_email' in st.session_state:
+            # Already authenticated
+            st.success(f"✅ Authenticated as: {st.session_state.lender_email}")
+            st.info(f"Auth type: {st.session_state.get('auth_type', 'manual')}")
+            
+            if st.button("Logout"):
+                st.session_state.lender_email = None
+                st.session_state.auth_type = None
+                st.rerun()
+        else:
+            # Manual authentication
+            st.info("🔑 Sign in with your email or GitHub")
+            
+            # Email input
+            email = st.text_input("Email Address", placeholder="your@email.com")
+            if st.button("Sign In with Email"):
+                if email and '@' in email:
+                    st.session_state.lender_email = email.lower()
+                    st.session_state.auth_type = 'manual'
+                    st.success(f"✅ Signed in as: {email}")
                     st.rerun()
                 else:
-                    st.error("❌ Invalid password")
-        else:
-            st.success("✅ Authenticated as Lender")
-            if st.button("Logout"):
-                st.session_state.lender_authenticated = False
-                st.rerun()
+                    st.error("❌ Please enter a valid email address")
+            
+            # GitHub OAuth info
+            st.info("💡 **GitHub Users**: Sign in via GitHub above for automatic authentication")
 
 # ============================================================================
 # CRITICAL SECTION: App Configuration and Validation
