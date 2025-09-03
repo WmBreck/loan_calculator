@@ -70,6 +70,33 @@ def load_data():
         st.error(f"Error loading saved data: {e}")
         return None
 
+def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Centralized function to clean and normalize payment data"""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Date","Amount"])
+    out = df.copy()
+
+    # normalize columns and strip
+    out.columns = [str(c).strip() for c in out.columns]
+    out["Date"] = out["Date"].astype(str).str.strip()
+
+    amt = out["Amount"].astype(str).str.strip()
+    amt = amt.str.replace(r"^\((.*)\)$", r"-\1", regex=True)  # (1,234.56) -> -1,234.56
+    amt = amt.str.replace(",", "", regex=False).str.replace("$", "", regex=False).str.replace("\u00A0","", regex=False)
+    out["Amount"] = pd.to_numeric(amt, errors="coerce")
+
+    d1 = pd.to_datetime(out["Date"], format="%m/%d/%Y", errors="coerce")
+    d2 = pd.to_datetime(out["Date"], format="%m/%d/%y",  errors="coerce")
+    ds = d1.fillna(d2).fillna(pd.to_datetime(out["Date"], errors="coerce"))
+    out["Date"] = ds.dt.date
+
+    out = out.dropna(subset=["Date","Amount"]).reset_index(drop=True)
+
+    # optional: filter insane values
+    out = out[out["Amount"] != 0]
+
+    return out
+
 # ============================================================================
 # CRITICAL SECTION: App Configuration and Validation
 # ============================================================================
@@ -243,8 +270,11 @@ if uploaded is not None:
             st.error("Could not find 'Date' and 'Amount' columns.")
         else:
             tmp = tmp[[date_col, amt_col]].rename(columns={date_col: "Date", amt_col: "Amount"})
-            current_loan_data["payments_df"] = tmp
+            # Use centralized cleaning function
+            clean_payments_df = clean_payments_df(tmp)
+            current_loan_data["payments_df"] = clean_payments_df
             save_data()
+            st.success(f"✅ CSV uploaded and cleaned successfully!")
     except Exception as e:
         st.error(f"Failed to parse CSV: {e}")
 
@@ -278,8 +308,11 @@ if st.button("Enter New Payment", type="primary"):
         payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
         payments_df = payments_df.sort_values("Date").reset_index(drop=True)
         
+        # Clean the combined payments using centralized function
+        clean_payments_df = clean_payments_df(payments_df)
+        
         # Update the loan data
-        current_loan_data["payments_df"] = payments_df
+        current_loan_data["payments_df"] = clean_payments_df
         save_data()
         
         st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
@@ -306,9 +339,11 @@ edited_df = st.data_editor(
 
 # Check if payments were edited and save if changed
 if not edited_df.equals(payments_df):
-    current_loan_data["payments_df"] = edited_df
+    # Clean the edited payments using centralized function
+    clean_payments_df = clean_payments_df(edited_df)
+    current_loan_data["payments_df"] = clean_payments_df
     save_data()
-    st.success("✅ Payment changes saved!")
+    st.success("✅ Payment changes saved and cleaned!")
 
 # ============================================================================
 # CRITICAL FUNCTION: Core Calculation Engine
@@ -319,52 +354,15 @@ if not edited_df.equals(payments_df):
 # ============================================================================
 
 def compute_schedule(principal, origination_date, annual_rate, payments_df):
-    df = payments_df.copy()
+    # Use centralized cleaning function
+    df = clean_payments_df(payments_df)
 
     # ---- DEBUG (conditional display) ----
     if st.session_state.get("show_debug", False):
-        st.text(f"Debug - Original payments count: {len(df)}")
+        st.text(f"Debug - Original payments count: {len(payments_df)}")
+        st.text(f"Debug - After cleaning count: {len(df)}")
         if not df.empty:
-            st.write("Debug - Original payments (head):", df.head())
-
-    # --- Normalize column names just in case ---
-    df.columns = [str(c).strip() for c in df.columns]
-
-    # --- Trim and normalize values ---
-    # Date: keep as string first
-    df["Date"] = df["Date"].astype(str).str.strip()
-
-    # Amount: remove currency formatting: commas, $; handle parentheses as negatives; trim spaces
-    amt = df["Amount"].astype(str).str.strip()
-    # Convert '(1,234.56)' -> '-1234.56'
-    amt = amt.str.replace(r"^\((.*)\)$", r"-\1", regex=True)
-    amt = amt.str.replace(",", "", regex=False).str.replace("$", "", regex=False)
-    # Some CSVs may carry stray non-breaking spaces or weird unicode
-    amt = amt.str.replace("\u00A0", "", regex=False)
-    df["Amount"] = pd.to_numeric(amt, errors="coerce")
-
-    # --- Parse dates flexibly ---
-    # Try common US formats first, including 2-digit years
-    d1 = pd.to_datetime(df["Date"], format="%m/%d/%Y", errors="coerce")
-    d2 = pd.to_datetime(df["Date"], format="%m/%d/%y",  errors="coerce")
-    # Where d1 is NaT, fill from d2; otherwise keep d1
-    date_series = d1.fillna(d2)
-    # Final fallback: generic parser
-    date_series = date_series.fillna(pd.to_datetime(df["Date"], errors="coerce"))
-
-    df["Date"] = date_series.dt.date
-
-    # --- Drop rows with missing essentials ---
-    before = len(df)
-    df = df.dropna(subset=["Date", "Amount"])
-    after = len(df)
-    if st.session_state.get("show_debug", False):
-        st.text(f"Debug - Dropped rows (missing Date/Amount): {before - after}")
-
-    if st.session_state.get("show_debug", False):
-        st.text(f"Debug - After parsing count: {len(df)}")
-        if not df.empty:
-            st.write("Debug - After parsing (head):", df.head())
+            st.write("Debug - After cleaning (head):", df.head())
 
     # --- Filter out payments before origination date ---
     if st.session_state.get("show_debug", False):
