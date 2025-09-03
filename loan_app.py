@@ -363,6 +363,13 @@ if not edited_df.equals(payments_df):
 # ============================================================================
 
 def compute_schedule(principal, origination_date, annual_rate, payments_df):
+    # Debug: Check what we received
+    if st.session_state.get("show_debug", False):
+        st.write(f"Debug - payments_df type: {type(payments_df)}")
+        st.write(f"Debug - payments_df content: {payments_df}")
+        if hasattr(payments_df, 'shape'):
+            st.write(f"Debug - payments_df shape: {payments_df.shape}")
+    
     # Use centralized cleaning function
     cleaned_df = clean_payments_df(payments_df)
 
