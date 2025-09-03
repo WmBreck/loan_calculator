@@ -61,7 +61,8 @@ def load_data():
                 df = pd.DataFrame(rows)
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
                 df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
-                loan["payments_df"] = df.dropna(subset=["Date","Amount"]).reset_index(drop=True)
+                # Don't drop rows during load - just ensure types are correct
+                loan["payments_df"] = df.reset_index(drop=True)
             else:
                 loan["payments_df"] = pd.DataFrame(columns=["Date", "Amount"])
 
@@ -90,9 +91,10 @@ def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
     ds = d1.fillna(d2).fillna(pd.to_datetime(out["Date"], errors="coerce"))
     out["Date"] = ds.dt.date
 
+    # Only drop rows that are completely invalid (both Date and Amount missing)
     out = out.dropna(subset=["Date","Amount"]).reset_index(drop=True)
 
-    # optional: filter insane values
+    # Only filter out truly zero amounts (not small amounts that might be valid)
     out = out[out["Amount"] != 0]
 
     return out
@@ -152,6 +154,13 @@ if "loans" not in st.session_state:
     if saved_data:
         st.session_state.loans = saved_data["loans"]
         st.session_state.current_loan = saved_data["current_loan"]
+        
+        # Debug: Show what was loaded
+        if st.session_state.get("show_debug", False):
+            for loan_name, loan_data in st.session_state.loans.items():
+                st.write(f"Debug - Loaded {loan_name}: {len(loan_data.get('payments_df', []))} payments")
+                if not loan_data.get('payments_df', []).empty:
+                    st.write(f"Debug - Sample payments: {loan_data['payments_df'].head()}")
     else:
         # Default loan if no saved data
         st.session_state.loans = {
