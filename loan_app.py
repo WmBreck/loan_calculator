@@ -80,10 +80,6 @@ def validate_critical_features():
 
 st.title("💸 Loan Payment Calculator & Report")
 
-# Validate critical features after all functions are defined
-if not validate_critical_features():
-    st.stop()
-
 st.markdown("""
 This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
 - Interest accrues daily on principal only.
@@ -665,3 +661,10 @@ with st.expander("💾 Data Persistence", expanded=False):
                 st.warning("No saved data found.")
 
 st.info("Run locally: 1) pip install streamlit matplotlib pandas  2) streamlit run loan_app.py")
+
+# ============================================================================
+# CRITICAL SECTION: Feature Validation
+# ============================================================================
+# Validate critical features after all functions are defined
+if not validate_critical_features():
+    st.stop()
