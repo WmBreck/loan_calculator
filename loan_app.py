@@ -140,10 +140,9 @@ def create_borrower_link(loan_name, token):
 def check_authentication():
     """Check if user is authenticated and determine role"""
     # Check URL parameters for borrower access
-    params = st.experimental_get_query_params()
-    loan_name = params.get('loan', [None])[0]
-    token = params.get('token', [None])[0]
-    role = params.get('role', [None])[0]
+    loan_name = st.query_params.get('loan', None)
+    token = st.query_params.get('token', None)
+    role = st.query_params.get('role', None)
     
     if role == 'borrower' and loan_name and token:
         # Verify borrower token
@@ -443,7 +442,7 @@ with st.sidebar:
     
     # Display current borrower link
     if "borrower_token" in current_loan_data:
-        base_url = st.experimental_get_query_params().get("loan", [""])[0]
+        base_url = st.query_params.get("loan", "")
         if not base_url:
             base_url = st.get_option("server.baseUrlPath") or "http://localhost:8501"
         
