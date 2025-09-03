@@ -442,13 +442,18 @@ with st.sidebar:
     
     # Display current borrower link
     if "borrower_token" in current_loan_data:
-        base_url = st.query_params.get("loan", "")
-        if not base_url:
-            base_url = st.get_option("server.baseUrlPath") or "http://localhost:8501"
+        # Create the relative path for the borrower link
+        borrower_path = create_borrower_link(current_loan_data['borrower'], current_loan_data['borrower_token'])
         
-        borrower_link = f"{base_url}{create_borrower_link(current_loan_data['borrower'], current_loan_data['borrower_token'])}"
-        st.code(borrower_link, language="text")
-        st.caption("Share this link with the borrower for read-only access")
+        st.info("🔗 **Borrower Access Link Generated**")
+        st.code(borrower_path, language="text")
+        st.caption("📋 **How to use:** Copy this path and add it to your Streamlit app URL")
+        
+        # Show full URL example
+        st.subheader("📧 **Full URL to Share:**")
+        example_url = f"http://localhost:8501{borrower_path}"
+        st.code(example_url, language="text")
+        st.caption("💡 **Note:** Replace 'localhost:8501' with your actual Streamlit app URL when sharing")
 
 st.subheader("Payments")
 st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
