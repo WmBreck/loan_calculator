@@ -1,41 +1,121 @@
-# Loan Repayment Calculator Development Progress Log
+# Loan Repayment Calculator Development Log
 
-## Front End Design
-- **2025-09-03 17:55** - Simplified table by removing "Accrued Interest (Unpaid) Carry" column for cleaner user experience
-- **2025-09-03 17:50** - Fixed NameError by adding missing save_data and load_data function definitions
-- **2025-09-03 17:45** - Restored and enhanced all previous improvements: column names, narrow widths, debug toggle, and persistent storage
-- **2025-09-03 17:40** - Fixed deprecated `use_container_width` parameter to use `width='stretch'`
-- **2025-09-03 17:35** - Implemented specific pixel-based column widths for optimal table layout and text wrapping
-- **2025-09-03 17:30** - Added debug mode toggle button with conditional display of debugging information
-- **2025-09-03 17:25** - Optimized column widths to "small" for all currency columns to accommodate 6-digit numbers with 2 decimal places
-- **2025-09-03 17:20** - Implemented persistent storage system with JSON file saving/loading for all loan data
-- **2025-09-03 17:15** - Added multi-loan management features (selection, creation, deletion, renaming)
-- **2025-09-03 17:10** - Enhanced table display with column configuration, help tooltips, and improved formatting
-- **2025-09-03 17:05** - Added "Current Status" section with real-time metrics for days since last payment, current balance, and accrued interest
-- **2025-09-03 16:55** - Fixed table column naming from "Days Since Prior Event" to "Days Since Last Payment" and "Interest Accrued Since Prior Event" to "Interest Accrued Since Last Payment"
+## 2025-09-03 17:55:00 - Front End Design
+Added manual payment entry functionality:
+- Added "Add New Payment" section with date picker and amount input
+- Implemented "Enter New Payment" button that adds payments to the loan
+- Auto-sorts payments by date and saves to persistent storage
+- Auto-recalculates schedule after adding new payment
+- Improved UI organization with clear sections for payment entry vs. payment history
 
-## Back End Design
-- **2025-09-03 17:25** - Fixed AttributeError by ensuring payments_df is always a DataFrame before comparison operations
-- **2025-09-03 17:20** - Implemented save_data() and load_data() functions for persistent storage using JSON serialization
-- **2025-09-03 17:15** - Enhanced CSV reading with dtype=str and keep_default_na=False to prevent premature type inference
-- **2025-09-03 17:10** - Improved date parsing robustness in compute_schedule function with multiple format attempts
-- **2025-09-03 17:05** - Modified build_pdf function to only show monthly balances for months with actual payment activity
-- **2025-09-03 16:50** - Fixed loan origination date from October 28, 2023 to August 31, 2023 as requested by user
-- **2025-09-03 16:45** - Resolved SyntaxError issues with escaped quotes in markdown and f-string literals
-- **2025-09-03 16:40** - Implemented Actual/365 simple interest calculation with proper payment allocation to interest and principal
+## 2025-09-03 17:54:00 - Front End Design
+Simplified table display by removing "Accrued Interest (Unpaid) Carry" column:
+- Removed column from compute_schedule output
+- Removed column from PDF report generation
+- Removed column from st.dataframe column configuration
+- Cleaner, more user-friendly table display
 
-## Bug Fixes
-- **2025-09-03 17:25** - Resolved AttributeError: 'list' object has no attribute 'equals' by adding DataFrame type safety checks
-- **2025-09-03 17:20** - Fixed data persistence issues ensuring loan data survives page refreshes and app restarts
-- **2025-09-03 17:15** - Corrected date parsing to handle all 24 payments from CSV upload instead of dropping payments
-- **2025-09-03 16:55** - Fixed HTTPS connection issues by implementing security bypass flags for local development
-- **2025-09-03 16:50** - Resolved Python syntax errors with proper string literal formatting
+## 2025-09-03 17:45:00 - Back End Design
+Fixed NameError for undefined load_data function:
+- Moved save_data() and load_data() function definitions to top of file
+- Re-applied all save_data calls throughout the application
+- Re-applied load_data call at startup
+- Restored debug toggle, enhanced data editor, column configuration, and updated column names
 
-## Current Status
-The app now has a clean, professional interface with:
-- Multi-loan management capabilities
-- Persistent data storage
-- Optimized table display with proper column widths
-- Conditional debug mode for administrators
-- Robust CSV processing and date parsing
-- Accurate interest and principal calculations
+## 2025-09-03 17:40:00 - Front End Design
+Fixed SyntaxError for repeated width parameter:
+- Removed duplicate width='stretch' from column_config section
+- Kept width='stretch' only in the st.dataframe call
+
+## 2025-09-03 17:35:00 - Front End Design
+Reverted CSS hack that expanded columns:
+- Removed CSS styling that was interfering with column width settings
+- Restored pixel-based column widths for optimal display
+
+## 2025-09-03 17:30:00 - Front End Design
+Applied CSS hack for text wrapping in header row:
+- Added CSS to force text wrapping in table headers
+- Attempted to fix column width issues with CSS styling
+
+## 2025-09-03 17:25:00 - Front End Design
+Fixed AttributeError for list vs DataFrame comparison:
+- Added explicit checks and conversions for current_loan_data["payments_df"]
+- Ensured DataFrame type consistency before comparison and data editor usage
+- Fixed data type issues caused by JSON serialization/deserialization
+
+## 2025-09-03 17:20:00 - Back End Design
+Implemented persistent storage system:
+- Added save_data() and load_data() functions using JSON
+- Integrated save_data() calls after all data modifications
+- Added load_data() call at app startup
+- Added "Data Persistence" expander with manual save/reload buttons
+
+## 2025-09-03 17:15:00 - Front End Design
+Added debug mode toggle:
+- Implemented "🔧 Display Debugging Information" button
+- Wrapped all debug st.text and st.write statements in conditional display
+- Debug information only shows when toggle is enabled
+
+## 2025-09-03 17:10:00 - Front End Design
+Improved table display formatting:
+- Renamed columns: "Days Since Prior Event" → "Days Since Last Payment", "Interest Accrued Since Prior Event" → "Interest Accrued Since Last Payment"
+- Set specific pixel widths for all columns (Payment Date: 80px, Days: 60px, currency: 100-120px)
+- Added help tooltips for each column
+- Set hide_index=True for cleaner display
+- Fixed deprecation warning by replacing use_container_width with width='stretch'
+
+## 2025-09-03 17:05:00 - Front End Design
+Added current status display:
+- Implemented "Current Status" section with st.metric components
+- Shows "Days Since Last Payment", "Current Principal Balance", "Interest Accrued Since Last Payment"
+- Added informational note about ongoing interest accrual
+
+## 2025-09-03 17:00:00 - Back End Design
+Enhanced PDF report generation:
+- Modified "Monthly Principal Balance" table to only include months with payment activity
+- Added current month if interest has accrued since last payment
+- Improved report readability and relevance
+
+## 2025-09-03 16:55:00 - Back End Design
+Fixed date parsing issues in compute_schedule:
+- Implemented robust multi-stage date parsing strategy
+- Added extensive debugging output for troubleshooting
+- Changed CSV reading to use dtype=str and keep_default_na=False
+- Added sequential parsing attempts with different date formats
+
+## 2025-09-03 16:50:00 - Back End Design
+Removed hardcoded default payments:
+- Eliminated pre-populated payment entries
+- App now starts with empty payment list
+- Users must add payments manually or via CSV upload
+
+## 2025-09-03 16:45:00 - Front End Design
+Implemented multi-loan management:
+- Added loan selection dropdown in sidebar
+- Added "Create New Loan" button with loan naming
+- Added "Delete Loan" and "Rename Loan" functionality
+- Integrated loan management with persistent storage
+
+## 2025-09-03 16:40:00 - Back End Design
+Fixed loan origination date:
+- Changed default origination_date from date(2023,12,31) to date(2023,8,31)
+- Updated to match user's actual loan start date
+
+## 2025-09-03 16:35:00 - Back End Design
+Fixed SyntaxError in markdown and f-strings:
+- Corrected escaped triple quotes \"\"\" to """ in st.markdown
+- Fixed f-string syntax error in summary generation
+- Resolved line continuation character issues
+
+## 2025-09-03 16:30:00 - Back End Design
+Resolved HTTPS connection issues:
+- Restarted Streamlit with security bypass flags
+- Used --server.headless true --server.enableCORS false --server.enableXsrfProtection false
+- App now runs successfully on localhost
+
+## 2025-09-03 16:25:00 - Project Setup
+Initial project setup:
+- Created loan_app.py with Streamlit loan payment calculator
+- Implemented Actual/365 simple interest calculation
+- Added CSV upload functionality for payment data
+- Created PDF report generation capability

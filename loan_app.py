@@ -190,6 +190,42 @@ if uploaded is not None:
     except Exception as e:
         st.error(f"Failed to parse CSV: {e}")
 
+# Manual payment entry
+st.subheader("Add New Payment")
+col1, col2 = st.columns(2)
+with col1:
+    new_payment_date = st.date_input("Payment Date", value=date.today(), key="new_payment_date")
+with col2:
+    new_payment_amount = st.number_input("Payment Amount ($)", min_value=0.01, value=100.0, step=10.0, format="%.2f", key="new_payment_amount")
+
+if st.button("Enter New Payment", type="primary"):
+    # Create new payment row
+    new_payment = pd.DataFrame({
+        "Date": [new_payment_date],
+        "Amount": [new_payment_amount]
+    })
+    
+    # Ensure we have a DataFrame for the current payments
+    payments_df = current_loan_data["payments_df"]
+    if isinstance(payments_df, list):
+        payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
+    
+    # Add new payment and sort by date
+    payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
+    payments_df = payments_df.sort_values("Date").reset_index(drop=True)
+    
+    # Update the loan data
+    current_loan_data["payments_df"] = payments_df
+    save_data()
+    
+    st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
+    
+    # Auto-recalculate the schedule
+    st.rerun()
+
+st.subheader("Payment History")
+st.caption("Edit payments below or use the CSV upload above to add multiple payments at once.")
+
 # Display and edit payments for current loan
 # Ensure we have a DataFrame for the data editor
 payments_df = current_loan_data["payments_df"]
