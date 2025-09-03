@@ -411,27 +411,10 @@ else:
     st.info("🔧 Debug mode: OFF - Check the box above to enable debugging information.")
 
 with st.sidebar:
-    st.header("Loan Terms")
-    principal = st.number_input("Original Principal ($)", min_value=0.0, value=current_loan_data["principal"], step=1000.0, format="%.2f")
-    origination_date = st.date_input("Origination Date", value=current_loan_data["origination_date"])
-    annual_rate = st.number_input("Interest Rate (APR %)", min_value=0.0, value=current_loan_data["annual_rate"], step=0.1, format="%.3f") / 100.0
-    term_years = st.number_input("Loan Term (years)", min_value=1, value=current_loan_data["term_years"], step=1)
-    
-    # Lender and Borrower information
-    st.header("Parties")
+    # Lender and Borrower information - MOVED TO TOP
+    st.header("👥 Parties")
     lender = st.text_input("Lender", value=current_loan_data.get("lender", "Your Company"))
     borrower = st.text_input("Borrower", value=current_loan_data.get("borrower", "Borrower Name"))
-    
-    # Update loan data when sidebar values change
-    current_loan_data.update({
-        "principal": principal,
-        "origination_date": origination_date,
-        "annual_rate": annual_rate * 100,  # Store as percentage
-        "term_years": term_years,
-        "lender": lender,
-        "borrower": borrower
-    })
-    save_data()
     
     # Borrower access link generation
     st.header("🔗 Borrower Access")
@@ -454,6 +437,24 @@ with st.sidebar:
         example_url = f"http://localhost:8501{borrower_path}"
         st.code(example_url, language="text")
         st.caption("💡 **Note:** Replace 'localhost:8501' with your actual Streamlit app URL when sharing")
+    
+    # Loan Terms - MOVED BELOW PARTIES
+    st.header("💰 Loan Terms")
+    principal = st.number_input("Original Principal ($)", min_value=0.0, value=current_loan_data["principal"], step=1000.0, format="%.2f")
+    origination_date = st.date_input("Origination Date", value=current_loan_data["origination_date"])
+    annual_rate = st.number_input("Interest Rate (APR %)", min_value=0.0, value=current_loan_data["annual_rate"], step=0.1, format="%.3f") / 100.0
+    term_years = st.number_input("Loan Term (years)", min_value=1, value=current_loan_data["term_years"], step=1)
+    
+    # Update loan data when sidebar values change
+    current_loan_data.update({
+        "principal": principal,
+        "origination_date": origination_date,
+        "annual_rate": annual_rate * 100,  # Store as percentage
+        "term_years": term_years,
+        "lender": lender,
+        "borrower": borrower
+    })
+    save_data()
 
 st.subheader("Payments")
 st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
