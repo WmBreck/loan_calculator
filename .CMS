@@ -1,0 +1,41 @@
+# Loan Repayment Calculator Development Progress Log
+
+## Front End Design
+- **2025-09-03 17:55** - Simplified table by removing "Accrued Interest (Unpaid) Carry" column for cleaner user experience
+- **2025-09-03 17:50** - Fixed NameError by adding missing save_data and load_data function definitions
+- **2025-09-03 17:45** - Restored and enhanced all previous improvements: column names, narrow widths, debug toggle, and persistent storage
+- **2025-09-03 17:40** - Fixed deprecated `use_container_width` parameter to use `width='stretch'`
+- **2025-09-03 17:35** - Implemented specific pixel-based column widths for optimal table layout and text wrapping
+- **2025-09-03 17:30** - Added debug mode toggle button with conditional display of debugging information
+- **2025-09-03 17:25** - Optimized column widths to "small" for all currency columns to accommodate 6-digit numbers with 2 decimal places
+- **2025-09-03 17:20** - Implemented persistent storage system with JSON file saving/loading for all loan data
+- **2025-09-03 17:15** - Added multi-loan management features (selection, creation, deletion, renaming)
+- **2025-09-03 17:10** - Enhanced table display with column configuration, help tooltips, and improved formatting
+- **2025-09-03 17:05** - Added "Current Status" section with real-time metrics for days since last payment, current balance, and accrued interest
+- **2025-09-03 16:55** - Fixed table column naming from "Days Since Prior Event" to "Days Since Last Payment" and "Interest Accrued Since Prior Event" to "Interest Accrued Since Last Payment"
+
+## Back End Design
+- **2025-09-03 17:25** - Fixed AttributeError by ensuring payments_df is always a DataFrame before comparison operations
+- **2025-09-03 17:20** - Implemented save_data() and load_data() functions for persistent storage using JSON serialization
+- **2025-09-03 17:15** - Enhanced CSV reading with dtype=str and keep_default_na=False to prevent premature type inference
+- **2025-09-03 17:10** - Improved date parsing robustness in compute_schedule function with multiple format attempts
+- **2025-09-03 17:05** - Modified build_pdf function to only show monthly balances for months with actual payment activity
+- **2025-09-03 16:50** - Fixed loan origination date from October 28, 2023 to August 31, 2023 as requested by user
+- **2025-09-03 16:45** - Resolved SyntaxError issues with escaped quotes in markdown and f-string literals
+- **2025-09-03 16:40** - Implemented Actual/365 simple interest calculation with proper payment allocation to interest and principal
+
+## Bug Fixes
+- **2025-09-03 17:25** - Resolved AttributeError: 'list' object has no attribute 'equals' by adding DataFrame type safety checks
+- **2025-09-03 17:20** - Fixed data persistence issues ensuring loan data survives page refreshes and app restarts
+- **2025-09-03 17:15** - Corrected date parsing to handle all 24 payments from CSV upload instead of dropping payments
+- **2025-09-03 16:55** - Fixed HTTPS connection issues by implementing security bypass flags for local development
+- **2025-09-03 16:50** - Resolved Python syntax errors with proper string literal formatting
+
+## Current Status
+The app now has a clean, professional interface with:
+- Multi-loan management capabilities
+- Persistent data storage
+- Optimized table display with proper column widths
+- Conditional debug mode for administrators
+- Robust CSV processing and date parsing
+- Accurate interest and principal calculations
