@@ -173,6 +173,152 @@ def validate_critical_features():
     
     return True
 
+# ============================================================================
+# CRITICAL FUNCTION: Core Calculation Engine
+# ============================================================================
+# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# This function contains the Actual/365 interest calculation logic
+# and payment allocation algorithm - core business logic
+# ============================================================================
+
+def compute_schedule(principal, origination_date, annual_rate, payments_df):
+    # Debug: Check what we received
+    if st.session_state.get("show_debug", False):
+        st.write(f"Debug - payments_df type: {type(payments_df)}")
+        st.write(f"Debug - payments_df content: {payments_df}")
+        if hasattr(payments_df, 'shape'):
+            st.write(f"Debug - payments_df shape: {payments_df.shape}")
+    
+    # Use centralized cleaning function
+    cleaned_df = clean_payments_df(payments_df)
+
+    # ---- DEBUG (conditional display) ----
+    if st.session_state.get("show_debug", False):
+        st.text(f"Debug - Original payments count: {len(payments_df)}")
+        st.text(f"Debug - After cleaning count: {len(cleaned_df)}")
+        if not cleaned_df.empty:
+            st.write("Debug - After cleaning (head):", cleaned_df.head())
+
+    # --- Filter out payments before origination date ---
+    if st.session_state.get("show_debug", False):
+        st.text(f"Debug - Origination date: {origination_date} ({type(origination_date).__name__})")
+    filtered_df = cleaned_df[cleaned_df["Date"] >= origination_date]
+
+    if st.session_state.get("show_debug", False):
+        st.text(f"Debug - After filtering count: {len(filtered_df)}")
+        if not filtered_df.empty:
+            st.write("Debug - After filtering (head):", filtered_df.head())
+
+    # --- Core schedule calculation (Actual/365 simple interest) ---
+    df = filtered_df.sort_values("Date")
+    schedule = []
+    bal = round(float(principal), 2)
+    last_date = origination_date
+    accrued_carry = 0.0
+
+    for _, row in df.iterrows():
+        d = row["Date"]
+        amt = float(row["Amount"])
+        days = (d - last_date).days
+        interest_accrued = bal * annual_rate * (days / 365.0) if days > 0 else 0.0
+        interest_due = interest_accrued + accrued_carry
+
+        if amt >= interest_due:
+            interest_applied = round(interest_due, 2)
+            principal_applied = round(amt - interest_due, 2)
+            bal = round(bal - principal_applied, 2)
+            accrued_carry = 0.0
+        else:
+            interest_applied = round(amt, 2)
+            principal_applied = 0.0
+            accrued_carry = round(interest_due - amt, 2)
+
+        schedule.append({
+            "Payment Date": d,
+            "Days Since Last Payment": days,
+            "Payment Amount": round(amt, 2),
+            "Interest Accrued Since Last Payment": round(interest_accrued, 2),
+            "Interest Applied": interest_applied,
+            "Principal Applied": principal_applied,
+            "Principal Balance After Payment": bal
+        })
+        last_date = d
+
+    return pd.DataFrame(schedule)
+
+# ============================================================================
+# CRITICAL FUNCTION: PDF Report Generation
+# ============================================================================
+# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+# This function generates the complete PDF report with all calculations
+# ============================================================================
+
+def build_pdf(df, principal, origination_date, annual_rate, term_years):
+    buf = BytesIO()
+    pp = PdfPages(buf)
+
+    # Summary page
+    fig = plt.figure(figsize=(8.5, 11))
+    fig.clf()
+    r = annual_rate / 12.0
+    n = int(term_years * 12)
+    ref_payment = 0.0 if r <= 0 or n <= 0 else round(principal * r / (1 - (1+r)**(-n)), 2)
+
+    summary = f"""\
+Loan Payment Report
+Generated: {date.today().strftime('%B %d, %Y')}
+
+Principal: ${principal:,.2f}
+Interest Rate: {annual_rate*100:.3f}% APR
+Term: {term_years} years
+Reference Payment (30/360): ${ref_payment:,.2f}
+
+Total Payments: {len(df)}
+Total Interest Applied: ${df['Interest Applied'].sum():,.2f}
+Total Principal Applied: ${df['Principal Applied'].sum():,.2f}
+Final Balance: ${df['Principal Balance After Payment'].iloc[-1]:,.2f}
+"""
+
+    plt.text(0.1, 0.9, summary, transform=fig.transFigure, fontsize=10, verticalalignment='top', fontfamily='monospace')
+    plt.title("Loan Payment Summary", fontsize=16, fontweight='bold')
+    pp.savefig(fig)
+    plt.close()
+
+    # Payment schedule page
+    if not df.empty:
+        fig, ax = plt.subplots(figsize=(8.5, 11))
+        ax.axis('tight')
+        ax.axis('off')
+        
+        # Prepare data for table
+        table_data = []
+        for _, row in df.iterrows():
+            table_data.append([
+                row['Payment Date'].strftime('%m/%d/%Y'),
+                f"${row['Payment Amount']:,.2f}",
+                f"${row['Interest Applied']:,.2f}",
+                f"${row['Principal Applied']:,.2f}",
+                f"${row['Principal Balance After Payment']:,.2f}"
+            ])
+        
+        table = ax.table(cellText=table_data,
+                       colLabels=['Date', 'Payment', 'Interest', 'Principal', 'Balance'],
+                       cellLoc='center',
+                       loc='center',
+                       colWidths=[0.2, 0.2, 0.2, 0.2, 0.2])
+        
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1, 2)
+        
+        plt.title("Payment Schedule", fontsize=16, fontweight='bold', pad=20)
+        pp.savefig(fig)
+        plt.close()
+
+    pp.close()
+    buf.seek(0)
+    return buf.getvalue()
+
 # Main application entry point
 def run_app():
     # Check authentication and determine user role
@@ -504,144 +650,6 @@ def run_app():
         # This function contains the Actual/365 interest calculation logic
         # and payment allocation algorithm - core business logic
         # ============================================================================
-
-        def compute_schedule(principal, origination_date, annual_rate, payments_df):
-            # Debug: Check what we received
-            if st.session_state.get("show_debug", False):
-                st.write(f"Debug - payments_df type: {type(payments_df)}")
-                st.write(f"Debug - payments_df content: {payments_df}")
-                if hasattr(payments_df, 'shape'):
-                    st.write(f"Debug - payments_df shape: {payments_df.shape}")
-            
-            # Use centralized cleaning function
-            cleaned_df = clean_payments_df(payments_df)
-
-            # ---- DEBUG (conditional display) ----
-            if st.session_state.get("show_debug", False):
-                st.text(f"Debug - Original payments count: {len(payments_df)}")
-                st.text(f"Debug - After cleaning count: {len(cleaned_df)}")
-                if not cleaned_df.empty:
-                    st.write("Debug - After cleaning (head):", cleaned_df.head())
-
-            # --- Filter out payments before origination date ---
-            if st.session_state.get("show_debug", False):
-                st.text(f"Debug - Origination date: {origination_date} ({type(origination_date).__name__})")
-            filtered_df = cleaned_df[cleaned_df["Date"] >= origination_date]
-
-            if st.session_state.get("show_debug", False):
-                st.text(f"Debug - After filtering count: {len(filtered_df)}")
-                if not filtered_df.empty:
-                    st.write("Debug - After filtering (head):", filtered_df.head())
-
-            # --- Core schedule calculation (Actual/365 simple interest) ---
-            df = filtered_df.sort_values("Date")
-            schedule = []
-            bal = round(float(principal), 2)
-            last_date = origination_date
-            accrued_carry = 0.0
-
-            for _, row in df.iterrows():
-                d = row["Date"]
-                amt = float(row["Amount"])
-                days = (d - last_date).days
-                interest_accrued = bal * annual_rate * (days / 365.0) if days > 0 else 0.0
-                interest_due = interest_accrued + accrued_carry
-
-                if amt >= interest_due:
-                    interest_applied = round(interest_due, 2)
-                    principal_applied = round(amt - interest_due, 2)
-                    bal = round(bal - principal_applied, 2)
-                    accrued_carry = 0.0
-                else:
-                    interest_applied = round(amt, 2)
-                    principal_applied = 0.0
-                    accrued_carry = round(interest_due - amt, 2)
-
-                schedule.append({
-                    "Payment Date": d,
-                    "Days Since Last Payment": days,
-                    "Payment Amount": round(amt, 2),
-                    "Interest Accrued Since Last Payment": round(interest_accrued, 2),
-                    "Interest Applied": interest_applied,
-                    "Principal Applied": principal_applied,
-                    "Principal Balance After Payment": bal
-                })
-                last_date = d
-
-            return pd.DataFrame(schedule)
-
-        # ============================================================================
-        # CRITICAL FUNCTION: PDF Report Generation
-        # ============================================================================
-        # DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
-        # This function generates the complete PDF report with all calculations
-        # ============================================================================
-
-        def build_pdf(df, principal, origination_date, annual_rate, term_years):
-            buf = BytesIO()
-            pp = PdfPages(buf)
-
-            # Summary page
-            fig = plt.figure(figsize=(8.5, 11))
-            fig.clf()
-            r = annual_rate / 12.0
-            n = int(term_years * 12)
-            ref_payment = 0.0 if r <= 0 or n <= 0 else round(principal * r / (1 - (1+r)**(-n)), 2)
-
-            summary = f"""\
-Loan Payment Report
-Generated: {date.today().strftime('%B %d, %Y')}
-
-Principal: ${principal:,.2f}
-Interest Rate: {annual_rate*100:.3f}% APR
-Term: {term_years} years
-Reference Payment (30/360): ${ref_payment:,.2f}
-
-Total Payments: {len(df)}
-Total Interest Applied: ${df['Interest Applied'].sum():,.2f}
-Total Principal Applied: ${df['Principal Applied'].sum():,.2f}
-Final Balance: ${df['Principal Balance After Payment'].iloc[-1]:,.2f}
-"""
-
-            plt.text(0.1, 0.9, summary, transform=fig.transFigure, fontsize=10, verticalalignment='top', fontfamily='monospace')
-            plt.title("Loan Payment Summary", fontsize=16, fontweight='bold')
-            pp.savefig(fig)
-            plt.close()
-
-            # Payment schedule page
-            if not df.empty:
-                fig, ax = plt.subplots(figsize=(8.5, 11))
-                ax.axis('tight')
-                ax.axis('off')
-                
-                # Prepare data for table
-                table_data = []
-                for _, row in df.iterrows():
-                    table_data.append([
-                        row['Payment Date'].strftime('%m/%d/%Y'),
-                        f"${row['Payment Amount']:,.2f}",
-                        f"${row['Interest Applied']:,.2f}",
-                        f"${row['Principal Applied']:,.2f}",
-                        f"${row['Principal Balance After Payment']:,.2f}"
-                    ])
-                
-                table = ax.table(cellText=table_data,
-                               colLabels=['Date', 'Payment', 'Interest', 'Principal', 'Balance'],
-                               cellLoc='center',
-                               loc='center',
-                               colWidths=[0.2, 0.2, 0.2, 0.2, 0.2])
-                
-                table.auto_set_font_size(False)
-                table.set_fontsize(9)
-                table.scale(1, 2)
-                
-                plt.title("Payment Schedule", fontsize=16, fontweight='bold', pad=20)
-                pp.savefig(fig)
-                plt.close()
-
-            pp.close()
-            buf.seek(0)
-            return buf.getvalue()
 
         # Calculate and display payment schedule
         if st.button("Calculate & Show Tables", type="primary"):
