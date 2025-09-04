@@ -1,7 +1,7 @@
 # loan_app.py
 # Shylock — Private Loan Servicing (MVP)
 # Streamlit + Supabase • Late Fees + Penalty Interest • ACT/365 simple interest
-# This version uses loans.loan_name (with fallback to legacy loans.name for display).
+# Uses loans.loan_name (with fallback to legacy loans.name for display).
 
 import streamlit as st
 st.set_page_config(page_title="Shylock — Private Loan Servicing", page_icon="💸", layout="wide")
@@ -12,7 +12,6 @@ from decimal import Decimal, ROUND_HALF_UP
 import secrets
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -65,11 +64,8 @@ def sign_out():
         st.error(f"Sign out error: {e}")
 
 def qp_get(name, default=None):
-    try:
-        return st.query_params.get(name, default)
-    except Exception:
-        # Older Streamlit fallback
-        return st.experimental_get_query_params().get(name, [default])[0]
+    # Modern Streamlit API only (no deprecated experimental calls)
+    return st.query_params.get(name, default)
 
 def role_from_query() -> str | None:
     return st.session_state.get("role") or qp_get("role")
@@ -332,7 +328,6 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
 
     # Compute summary totals
     if not ledger.empty:
-        # Beginning principal approximation: last_end + allocated_principal on the first row
         begin_prin = float(ledger.iloc[0]["Principal Balance (End)"] + ledger.iloc[0]["Allocated → Principal"])
         end_prin = float(ledger.iloc[-1]["Principal Balance (End)"])
         tot_pay = float(ledger["Payment Amount"].sum())
@@ -599,7 +594,6 @@ def lender_view(user_id: str):
                 "penalty_interest_rate": penalty_apr,
             })
             try:
-                # Ensure these columns exist in DB (run migration SQL once if needed)
                 upsert_loan(loan)
                 st.success("Saved.")
             except Exception as e:
@@ -710,7 +704,6 @@ def _common_loan_view(loan_row: dict, read_only: bool):
         c1.metric("Current Principal Balance", f"${float(last_row['Principal Balance (End)']):,.2f}")
         c2.metric("Outstanding Late Fees", f"${float(last_row['Late Fees Outstanding (End)']):,.2f}")
         c3.metric("Outstanding Penalty Interest", f"${float(last_row['Penalty Interest Outstanding (End)']):,.2f}")
-        # days since last payment
         last_pay = pd.to_datetime(ledger["Payment Date"]).max().date()
         c4.metric("Days Since Last Payment", (date.today() - last_pay).days)
 
@@ -741,11 +734,7 @@ def main():
         st.stop()
 
     # Handle Supabase redirect tokens (magic link / oauth)
-    query_params = getattr(st, "query_params", None)
-    try:
-        qp = dict(query_params)
-    except Exception:
-        qp = st.experimental_get_query_params()
+    qp = dict(st.query_params)
     if "access_token" in qp or "refresh_token" in qp:
         st.info("🔄 Processing authentication...")
         try:
