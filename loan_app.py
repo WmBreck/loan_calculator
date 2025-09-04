@@ -1,18 +1,19 @@
 # loan_app.py
-# Shylock — Private Loan Servicing (MVP)
-# Streamlit + Supabase • Late Fees + Penalty Interest • ACT/365 simple interest
-# Uses loans.loan_name (fallback to legacy loans.name for display)
-# Uses modern st.query_params API only. Responsive header with embedded logo and wordmark colors matched to logo.
+# Shylock — Private Loan Servicing (MVP, usability patched)
+# Streamlit + Supabase • ACT/365 simple interest • Late fees + Penalty interest
+# Centered layout • Mobile-friendly ledger • Lender/Borrower modes
 
 import streamlit as st
-st.set_page_config(page_title="Shylock — Private Loan Servicing", page_icon="💸", layout="wide")
+st.set_page_config(page_title="Shylock — Private Loan Servicing",
+                   page_icon="💸", layout="centered")
 
 from io import BytesIO
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as _dt
 from decimal import Decimal, ROUND_HALF_UP
-import secrets
 import base64
-from pathlib import Path as _Path
+import secrets
+import re
+from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -35,9 +36,29 @@ except Exception as e:
     supabase = None
     st.error(f"Supabase init failed: {e}")
 
+# ---------------------------
+# Global CSS (width, scrolling, sidebar spacing)
+# ---------------------------
+def _inject_global_css():
+    st.markdown(
+        """
+        <style>
+        /* Center main column and cap width for readability */
+        .block-container {max-width: 980px; margin: 0 auto;}
+        /* Ensure data editors/frames scroll horizontally if wider than container */
+        [data-testid="stDataEditor"], [data-testid="stDataFrame"] {overflow: auto !important;}
+        /* Sidebar width + reduce vertical spacing a bit */
+        @media (min-width: 1000px) {
+          [data-testid="stSidebar"] {min-width: 300px; max-width: 320px;}
+        }
+        section[data-testid="stSidebar"] .stSlider {margin-top:.15rem!important;margin-bottom:.35rem!important;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------
-# Helpers: auth + query params
+# Helpers: auth, tokens, query params
 # ---------------------------
 def get_session():
     if not SUPABASE_OK:
@@ -54,6 +75,32 @@ def ensure_session_in_state():
         sess = get_session()
         if sess and getattr(sess, "session", None):
             st.session_state["session"] = sess.session
+
+def _save_tokens_to_state(session_obj):
+    """Persist Supabase tokens across reruns."""
+    try:
+        if session_obj and getattr(session_obj, "access_token", None) and getattr(session_obj, "refresh_token", None):
+            st.session_state["sb_tokens"] = {
+                "access_token": session_obj.access_token,
+                "refresh_token": session_obj.refresh_token,
+            }
+    except Exception:
+        pass
+
+def _restore_session_from_state():
+    """If tokens are saved but the client has no session, restore it."""
+    try:
+        if not SUPABASE_OK:
+            return
+        current = supabase.auth.get_session()
+        if getattr(current, "session", None):
+            return
+        toks = st.session_state.get("sb_tokens")
+        if toks and "access_token" in toks and "refresh_token" in toks:
+            supabase.auth.set_session(toks["access_token"], toks["refresh_token"])
+            st.session_state["session"] = supabase.auth.get_session().session
+    except Exception:
+        pass
 
 def sign_out():
     if not SUPABASE_OK:
@@ -82,18 +129,17 @@ def set_role_in_url(role: str):
     except Exception:
         pass
 
-
 # ---------------------------
-# Responsive Header (wordmark + embedded logo + tagline)
+# Header / Wordmark (logo inline)
 # ---------------------------
 def render_header(
     logo_path: str = "ShylockLogo.png",
     tagline: str = "The humane way to track private personal loans.",
-    shylock_color: str = "#00B050",  # green from dollar signs
-    online_color: str = "#E32636",   # red from IOU tiles
+    shylock_color: str = "#00B050",   # green
+    online_color: str = "#E32636",    # red
 ):
     logo_b64 = ""
-    p = _Path(logo_path)
+    p = Path(logo_path)
     if p.exists():
         try:
             logo_b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
@@ -104,67 +150,23 @@ def render_header(
         f"""
 <style>
 .shylock-header {{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem;
-  width: 100%;
-  padding: .5rem 0 .75rem 0;
-  flex-wrap: wrap;
-  border-bottom: 1px solid rgba(0,0,0,0.07);
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  width:100%;padding:.5rem 0 .75rem;border-bottom:1px solid rgba(0,0,0,.07);flex-wrap:wrap;
 }}
-.shylock-wordmark {{
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1 1 auto;
-  min-width: 280px;
-  line-height: 1;
-}}
+.shylock-wordmark {{display:flex;align-items:center;gap:1rem;flex:1 1 auto;min-width:280px;line-height:1;}}
 .shylock-text {{
-  font-family: "Georgia", "Garamond", "Times New Roman", serif;
-  font-weight: 700;
-  letter-spacing: .5px;
-  display: inline-flex;
-  align-items: center;
-  gap: .8rem;
-  white-space: nowrap;
+  font-family:"Georgia","Garamond","Times New Roman",serif;font-weight:700;letter-spacing:.5px;
+  display:inline-flex;align-items:center;gap:.8rem;white-space:nowrap;
 }}
-.shylock-text .shylock {{
-  color: {shylock_color};
-  font-size: clamp(32px, 4vw, 48px);
-}}
-.shylock-text .online {{
-  color: {online_color};
-  font-size: clamp(32px, 4vw, 48px);
-}}
-.shylock-logo {{
-  display: inline-block;
-  width: clamp(36px, 4vw, 52px);
-  height: clamp(36px, 4vw, 52px);
-  object-fit: contain;
-  vertical-align: middle;
-}}
-.shylock-tagline {{
-  font-family: "Georgia", "Garamond", serif;
-  font-weight: 500;
-  font-size: clamp(12px, 1.6vw, 16px);
-  color: rgba(0,0,0,0.72);
-  margin-left: auto;
-  white-space: nowrap;
-}}
-@media (max-width: 900px) {{
-  .shylock-header {{ justify-content: center; }}
-  .shylock-tagline {{
-    width: 100%;
-    text-align: center;
-    white-space: normal;
-    margin-left: 0;
-    margin-top: .2rem;
-  }}
+.shylock-text .shylock {{color:{shylock_color};font-size:clamp(32px,4vw,48px);}}
+.shylock-text .online  {{color:{online_color}; font-size:clamp(32px,4vw,48px);}}
+.shylock-logo {{display:inline-block;width:clamp(36px,4vw,52px);height:clamp(36px,4vw,52px);object-fit:contain;vertical-align:middle;}}
+.shylock-tagline {{font-family:"Georgia","Garamond",serif;font-weight:500;font-size:clamp(12px,1.6vw,16px);color:rgba(0,0,0,.72);}}
+@media (max-width:900px){{
+  .shylock-header{{justify-content:center;}}
+  .shylock-tagline{{width:100%;text-align:center;margin-top:.25rem;}}
 }}
 </style>
-
 <div class="shylock-header">
   <div class="shylock-wordmark">
     <div class="shylock-text">
@@ -179,9 +181,30 @@ def render_header(
         unsafe_allow_html=True,
     )
 
+# ---------------------------
+# Date helpers (MM/DD/YYYY)
+# ---------------------------
+def _format_us_date(d):
+    try:
+        return _dt.strftime(pd.to_datetime(d).to_pydatetime(), "%m/%d/%Y")
+    except Exception:
+        return ""
+
+def _parse_us_date(s: str):
+    if not s or not str(s).strip():
+        return None
+    s = str(s).strip()
+    m = re.match(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*$", s)
+    if not m:
+        return None
+    mm, dd, yyyy = map(int, m.groups())
+    try:
+        return _dt(year=yyyy, month=mm, day=dd).date()
+    except Exception:
+        return None
 
 # ---------------------------
-# DB access (current schema friendly)
+# DB access
 # ---------------------------
 def loans_for_lender(user_id: str) -> list[dict]:
     try:
@@ -200,7 +223,7 @@ def loans_for_borrower_by_token(token: str) -> list[dict]:
         return []
 
 def loans_for_borrower_signed_in(user_id: str) -> list[dict]:
-    """Optional join table loan_borrowers(user_id, loan_id). If absent, return []."""
+    """If join table loan_borrowers exists, use it; else return []."""
     try:
         supabase.table("loan_borrowers").select("loan_id").limit(1).execute()
         lb = supabase.table("loan_borrowers").select("loan_id").eq("user_id", user_id).execute().data or []
@@ -247,7 +270,6 @@ def replace_payments(loan_id: str, df: pd.DataFrame):
     if payload:
         supabase.table("payments").insert(payload).execute()
 
-
 # ---------------------------
 # Data cleaning
 # ---------------------------
@@ -272,9 +294,8 @@ def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
     out = out[out["amount"] > 0]
     return out[["payment_date", "amount"]]
 
-
 # ---------------------------
-# Ledger math (ACT/365 simple) with Late Fees + Penalty Interest
+# Ledger math (ACT/365) + Late Fees + Penalty Interest
 # ---------------------------
 from datetime import date as _date, timedelta as _timedelta
 
@@ -287,10 +308,7 @@ def _prev_due_date(orig: _date, when: _date) -> _date:
         months -= 1
     y = orig.year + (orig.month - 1 + months) // 12
     m = ((orig.month - 1 + months) % 12) + 1
-    if m == 12:
-        last_day = (_date(y + 1, 1, 1) - _timedelta(days=1)).day
-    else:
-        last_day = (_date(y, m + 1, 1) - _timedelta(days=1)).day
+    last_day = (_date(y + (m == 12), (m % 12) + 1, 1) - _timedelta(days=1)).day if m != 12 else (_date(y + 1, 1, 1) - _timedelta(days=1)).day
     day = min(orig.day, last_day)
     return _date(y, m, day)
 
@@ -329,12 +347,12 @@ def compute_ledger(
         accrued_loan_i = (bal_p * apr_p * Decimal(days_loan) / Decimal(365)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         loan_i_due = (accrued_loan_i + loan_i_carry).quantize(Decimal("0.01"))
 
-        # 2) Assess late fee
+        # 2) Assess late fee if past grace
         new_late_fee = _dec(0)
         if late_fee_days is not None and late_fee_days >= 0:
             if pay_dt > (due_dt + timedelta(days=int(late_fee_days))):
                 if late_fee_type == "percent":
-                    ref = (bal_p * apr_p / Decimal(12)).quantize(Decimal("0.01"))
+                    ref = (bal_p * apr_p / Decimal(12)).quantize(Decimal("0.01"))  # approx 1 month interest
                     new_late_fee = (ref * Decimal(late_fee_amount) / Decimal(100)).quantize(Decimal("0.01"))
                 else:
                     new_late_fee = _dec(late_fee_amount)
@@ -374,15 +392,13 @@ def compute_ledger(
 
     return pd.DataFrame(rows)
 
-
 # ---------------------------
-# PDF Builder (Matplotlib)
+# PDF builder
 # ---------------------------
 def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
     buf = BytesIO()
     pp = PdfPages(buf)
 
-    # --- Summary page ---
     fig = plt.figure(figsize=(8.5, 11))
     fig.clf()
     plt.axis('off')
@@ -391,12 +407,10 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
     title = "Loan Statement"
     subtitle = f"{loan_label} — Generated {date.today():%b %d, %Y}"
     lines = [
-        title,
-        subtitle,
-        "",
+        title, subtitle, "",
         f"Lender: {loan_meta.get('lender_name','')}",
         f"Borrower: {loan_meta.get('borrower_name','')}",
-        f"Origination: {pd.to_datetime(loan_meta.get('origination_date')).date():%b %d, %Y}" if loan_meta.get('origination_date') else "Origination: —",
+        f"Origination: {_format_us_date(loan_meta.get('origination_date')) or '—'}",
         f"APR: {float(loan_meta.get('annual_rate', 0.0)):.3f}% (ACT/365 simple interest)",
         f"Late Fee: {loan_meta.get('late_fee_type','fixed')} {loan_meta.get('late_fee_amount',0)}; "
         f"Grace: {loan_meta.get('late_fee_days',0)} day(s); "
@@ -435,7 +449,8 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
 
     y = 0.95
     for s in lines:
-        plt.text(0.05, y, s, ha='left', va='top', fontsize=11, family='sans-serif', weight='bold' if s == title else 'normal')
+        plt.text(0.05, y, s, ha='left', va='top', fontsize=11,
+                 family='sans-serif', weight='bold' if s == title else 'normal')
         y -= 0.035
     y -= 0.01
     for s in summary_lines:
@@ -445,20 +460,18 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
     pp.savefig(fig, bbox_inches='tight')
     plt.close(fig)
 
-    # --- Ledger pages ---
     if not ledger.empty:
         dfp = ledger.copy()
         dfp["Payment Date"] = pd.to_datetime(dfp["Payment Date"]).dt.strftime("%Y-%m-%d")
         dfp["Due Date"] = pd.to_datetime(dfp["Due Date"]).dt.strftime("%Y-%m-%d")
-
         cols = [
             "Payment Date", "Due Date", "Payment Amount",
             "Penalty Interest Accrued", "Late Fee (Assessed)",
             "Allocated → Penalty Interest", "Allocated → Late Fees",
             "Allocated → Loan Interest", "Allocated → Principal",
-            "Principal Balance (End)", "Late Fees Outstanding (End)", "Penalty Interest Outstanding (End)"
+            "Principal Balance (End)", "Late Fees Outstanding (End)",
+            "Penalty Interest Outstanding (End)"
         ]
-
         rows_per_page = 24
         for start in range(0, len(dfp), rows_per_page):
             chunk = dfp.iloc[start:start + rows_per_page][cols]
@@ -476,7 +489,6 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
     pp.close()
     buf.seek(0)
     return buf.getvalue()
-
 
 # ---------------------------
 # UI: Landing
@@ -524,6 +536,7 @@ def landing():
                     try:
                         res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
                         st.session_state["session"] = res.session
+                        _save_tokens_to_state(res.session)
                         st.success(f"✅ Signed in as {email}")
                         try:
                             uid = res.user.id
@@ -548,9 +561,8 @@ def landing():
 
     st.caption("OAuth (Google/Apple) can be enabled later via Supabase Auth providers.")
 
-
 # ---------------------------
-# UI: Borrower Views
+# UI: Borrower Views (read-only)
 # ---------------------------
 def borrower_view_by_token(token: str):
     render_header()
@@ -570,14 +582,13 @@ def borrower_view_signed_in(user_id: str):
     if not rows:
         st.info("No loans are shared with this account.")
         return
-    names = [f"{(r.get('loan_name') or r.get('name') or 'Loan')} — {r['id'][:8]}" for r in rows]
+    names = [f"{(r.get('loan_name') or r.get('name') or 'Loan')} — {r.get('borrower_name','(Borrower?)')}" for r in rows]
     idx = st.selectbox("Select loan", range(len(rows)), format_func=lambda i: names[i])
     loan = rows[idx]
     _common_loan_view(loan, read_only=True)
 
-
 # ---------------------------
-# UI: Lender View
+# UI: Lender View (create/edit)
 # ---------------------------
 def lender_view(user_id: str):
     render_header()
@@ -597,10 +608,9 @@ def lender_view(user_id: str):
     with t1:
         if st.button("➕ New Loan"):
             try:
-                lender_name = company_name
                 new = {
                     "lender_id": user_id,
-                    "lender_name": lender_name,
+                    "lender_name": company_name,
                     "loan_name": f"Loan {len(loans)+1}",
                     "principal": 100000.0,
                     "origination_date": date.today().isoformat(),
@@ -626,20 +636,37 @@ def lender_view(user_id: str):
         st.info("No loans yet. Click **New Loan** to create one.")
         return
 
+    st.caption(f"Active loans found: {len(loans)}")
+    show_ids = st.checkbox("Show loan IDs", value=False, help="Enable to display the short loan id in the selector")
     sel = st.selectbox(
         "Select Loan",
         options=range(len(loans)),
-        format_func=lambda i: f"{(loans[i].get('loan_name') or loans[i].get('name') or 'Loan')} — {loans[i].get('borrower_name','(Borrower?)')} — {loans[i]['id'][:8]}"
+        format_func=lambda i: (
+            f"{(loans[i].get('loan_name') or loans[i].get('name') or 'Loan')} — {loans[i].get('borrower_name','(Borrower?)')}"
+            + (f" — {loans[i]['id'][:8]}" if show_ids else "")
+        )
     )
     loan = loans[sel]
 
+    # Sidebar (lender-only actions)
     with st.sidebar:
         st.header("💰 Loan Terms")
         name_val = loan.get("loan_name") or loan.get("name","")
         name = st.text_input("Loan Name", value=name_val)
         borrower_name = st.text_input("Borrower Name", value=loan.get("borrower_name",""))
         principal = st.number_input("Original Principal ($)", min_value=0.0, value=float(loan.get("principal") or 0.0), step=1000.0, format="%.2f")
-        origination_date = st.date_input("Origination Date", value=pd.to_datetime(loan.get("origination_date")).date() if loan.get("origination_date") else date.today())
+
+        # MM/DD/YYYY origination date input
+        origination_date_str = st.text_input("Origination Date (MM/DD/YYYY)",
+                                             value=_format_us_date(loan.get("origination_date")),
+                                             help="Enter as MM/DD/YYYY (leading zeros optional)")
+        parsed_orig = _parse_us_date(origination_date_str)
+        if parsed_orig is None:
+            st.warning("Enter a valid date like 08/31/2023")
+        origination_date_val = parsed_orig or (
+            pd.to_datetime(loan.get("origination_date")).date() if loan.get("origination_date") else date.today()
+        )
+
         annual_rate_pct = st.number_input("Interest Rate (APR %)", min_value=0.0, value=float(loan.get("annual_rate") or 0.0), step=0.1, format="%.3f")
         term_years = st.number_input("Loan Term (years)", min_value=1, value=int(loan.get("term_years") or 30), step=1)
 
@@ -650,20 +677,26 @@ def lender_view(user_id: str):
         late_fee_days = st.number_input("Grace Period (days)", min_value=0, value=int(loan.get("late_fee_days") or 0), step=1)
         penalty_apr = st.number_input("Penalty Interest APR (%) (optional)", min_value=0.0, value=float(loan.get("penalty_interest_rate") or 0.0), step=0.1, format="%.3f")
 
-        st.divider()
-        st.subheader("Borrower link (read-only)")
-        st.code(f"?role=borrower&token={loan.get('borrower_token')}", language="text")
-        if st.button("Generate New Borrower Token"):
-            loan["borrower_token"] = secrets.token_urlsafe(32)
-            upsert_loan(loan)
-            st.success("New borrower token generated.")
+        with st.expander("Borrower link (read-only)", expanded=False):
+            st.code(f"?role=borrower&token={loan.get('borrower_token')}", language="text")
+            if st.button("Generate New Borrower Token"):
+                loan["borrower_token"] = secrets.token_urlsafe(32)
+                upsert_loan(loan)
+                st.success("New borrower token generated.")
 
-        if st.button("💾 Save Loan"):
+        st.markdown("### Actions")
+        colA, colB = st.columns(2)
+        with colA:
+            save_clicked = st.button("💾 Save Loan", use_container_width=True)
+        with colB:
+            del_clicked = st.button("🗑️ Delete Loan", use_container_width=True)
+
+        if save_clicked:
             loan.update({
                 "loan_name": name,
                 "borrower_name": borrower_name,
                 "principal": principal,
-                "origination_date": origination_date.isoformat(),
+                "origination_date": origination_date_val.isoformat(),
                 "annual_rate": annual_rate_pct,
                 "term_years": int(term_years),
                 "late_fee_type": late_fee_type,
@@ -674,10 +707,22 @@ def lender_view(user_id: str):
             try:
                 upsert_loan(loan)
                 st.success("Saved.")
+                st.rerun()
             except Exception as e:
-                st.error(f"Save failed: {e}")
+                msg = str(e)
+                if "PGRST204" in msg or "schema cache" in msg:
+                    for k in ["late_fee_type", "late_fee_amount", "late_fee_days", "penalty_interest_rate"]:
+                        loan.pop(k, None)
+                    try:
+                        upsert_loan(loan)
+                        st.warning("Saved without late-fee fields. Run migrations.sql in Supabase, then click 🔄 Refresh.")
+                        st.rerun()
+                    except Exception as e2:
+                        st.error(f"Save failed (legacy retry): {e2}")
+                else:
+                    st.error(f"Save failed: {e}")
 
-        if st.button("🗑️ Delete Loan"):
+        if del_clicked:
             try:
                 delete_loan(loan["id"])
                 st.warning("Loan deleted.")
@@ -686,7 +731,6 @@ def lender_view(user_id: str):
                 st.error(f"Delete failed: {e}")
 
     _common_loan_view(loan, read_only=False)
-
 
 # ---------------------------
 # Shared loan view (payments + ledger + exports)
@@ -698,79 +742,143 @@ def _common_loan_view(loan_row: dict, read_only: bool):
     st.subheader("Payments")
     st.caption("Upload CSV with columns: Date, Amount (or Payment Date, Amount). Positive amounts are payments.")
 
-    uploaded = st.file_uploader("Upload payments CSV (optional)", type=["csv"], disabled=read_only)
-    if uploaded is not None and not read_only:
-        try:
-            tmp = pd.read_csv(uploaded, dtype=str, keep_default_na=False)
-            cols_lower = [c.lower().strip() for c in tmp.columns]
-            if "date" in cols_lower and "amount" in cols_lower:
-                tmp = tmp.rename(columns={tmp.columns[cols_lower.index("date")]: "payment_date",
-                                          tmp.columns[cols_lower.index("amount")]: "amount"})
-            elif "payment_date" in cols_lower and "amount" in cols_lower:
-                tmp = tmp.rename(columns={tmp.columns[cols_lower.index("payment_date")]: "payment_date",
-                                          tmp.columns[cols_lower.index("amount")]: "amount"})
-            else:
-                st.error("CSV must include columns: Date, Amount (or Payment Date, Amount).")
-                tmp = None
+    # CSV upload (hide after initial; expander to replace)
+    if payments_df.empty:
+        uploaded = st.file_uploader("Upload payments CSV (optional)", type=["csv"], disabled=read_only)
+        if uploaded is not None and not read_only:
+            try:
+                tmp = pd.read_csv(uploaded, dtype=str, keep_default_na=False)
+                cols_lower = [c.lower().strip() for c in tmp.columns]
+                if "date" in cols_lower and "amount" in cols_lower:
+                    tmp = tmp.rename(columns={tmp.columns[cols_lower.index("date")]: "payment_date",
+                                              tmp.columns[cols_lower.index("amount")]: "amount"})
+                elif "payment_date" in cols_lower and "amount" in cols_lower:
+                    tmp = tmp.rename(columns={tmp.columns[cols_lower.index("payment_date")]: "payment_date",
+                                              tmp.columns[cols_lower.index("amount")]: "amount"})
+                else:
+                    st.error("CSV must include columns: Date, Amount (or Payment Date, Amount).")
+                    tmp = None
+                if tmp is not None:
+                    cleaned = clean_payments_df(tmp)
+                    replace_payments(loan_id, cleaned)
+                    st.success(f"Imported {len(cleaned)} payments.")
+                    payments_df = payments_for_loan(loan_id)
+            except Exception as e:
+                st.error(f"CSV parse failed: {e}")
+    else:
+        with st.expander("Replace payments (upload a new CSV)", expanded=False):
+            uploaded = st.file_uploader("Upload new CSV", type=["csv"], disabled=read_only)
+            if uploaded is not None and not read_only:
+                try:
+                    tmp = pd.read_csv(uploaded, dtype=str, keep_default_na=False)
+                    cols_lower = [c.lower().strip() for c in tmp.columns]
+                    if "date" in cols_lower and "amount" in cols_lower:
+                        tmp = tmp.rename(columns={tmp.columns[cols_lower.index("date")]: "payment_date",
+                                                  tmp.columns[cols_lower.index("amount")]: "amount"})
+                    elif "payment_date" in cols_lower and "amount" in cols_lower:
+                        tmp = tmp.rename(columns={tmp.columns[cols_lower.index("payment_date")]: "payment_date",
+                                                  tmp.columns[cols_lower.index("amount")]: "amount"})
+                    else:
+                        st.error("CSV must include columns: Date, Amount (or Payment Date, Amount).")
+                        tmp = None
+                    if tmp is not None:
+                        cleaned = clean_payments_df(tmp)
+                        replace_payments(loan_id, cleaned)
+                        st.success(f"Imported {len(cleaned)} payments (replaced).")
+                        payments_df = payments_for_loan(loan_id)
+                except Exception as e:
+                    st.error(f"CSV parse failed: {e}")
 
-            if tmp is not None:
-                cleaned = clean_payments_df(tmp)
-                replace_payments(loan_id, cleaned)
-                st.success(f"Imported {len(cleaned)} payments.")
-                payments_df = payments_for_loan(loan_id)
-        except Exception as e:
-            st.error(f"CSV parse failed: {e}")
+    # Helper: warn if origination date > earliest payment
+    if not payments_df.empty and loan_row.get("origination_date"):
+        earliest = pd.to_datetime(payments_df["payment_date"]).min().date()
+        orig_dt = pd.to_datetime(loan_row.get("origination_date")).date()
+        if orig_dt > earliest:
+            st.warning(f"Origination date ({_format_us_date(orig_dt)}) is after earliest payment ({_format_us_date(earliest)}). "
+                       f"Set origination date on or before {_format_us_date(earliest)} to include all payments in the ledger.")
 
+    # Add New Payment (date string + amount default 0.00)
     if not read_only:
         st.subheader("Add New Payment")
         c1, c2, c3 = st.columns([1, 1, 1])
         with c1:
-            new_date = st.date_input("Payment Date", value=date.today(), key=f"new_date_{loan_id}")
+            new_date_str = st.text_input("Payment Date (MM/DD/YYYY)", value="", key=f"new_date_str_{loan_id}")
         with c2:
-            new_amount = st.number_input("Amount ($)", min_value=0.01, value=100.00, step=10.0, format="%.2f", key=f"new_amt_{loan_id}")
+            new_amount = st.number_input("Amount ($)", min_value=0.00, value=0.00, step=10.0, format="%.2f", key=f"new_amt_{loan_id}")
         with c3:
             if st.button("Add Payment", key=f"addpay_{loan_id}"):
-                add = payments_df.copy()
-                add = pd.concat([add, pd.DataFrame([{"payment_date": new_date, "amount": new_amount}])], ignore_index=True)
-                add = clean_payments_df(add)
-                replace_payments(loan_id, add)
-                st.success("Payment added.")
-                payments_df = payments_for_loan(loan_id)
+                parsed_new_date = _parse_us_date(new_date_str)
+                if parsed_new_date is None or new_amount <= 0:
+                    st.error("Enter a valid date (MM/DD/YYYY) and amount > 0.")
+                else:
+                    add = payments_df.copy()
+                    add = pd.concat([add, pd.DataFrame([{"payment_date": parsed_new_date, "amount": new_amount}])], ignore_index=True)
+                    add = clean_payments_df(add)
+                    replace_payments(loan_id, add)
+                    st.success("Payment added.")
+                    payments_df = payments_for_loan(loan_id)
 
     label = loan_row.get('loan_name') or loan_row.get('name') or 'Loan'
     st.subheader(f"Ledger — {label} (Late Fees + Penalty Interest) — ACT/365")
 
+    # Mobile-friendly option: core columns by default
+    mobile_view = st.checkbox("Mobile view (core columns only)", value=True,
+                              help="Show fewer columns for small screens")
     ledger = compute_ledger(
         principal=float(loan_row.get("principal") or 0.0),
         origination_date=pd.to_datetime(loan_row.get("origination_date")).date() if loan_row.get("origination_date") else date.today(),
         annual_rate_decimal=float(loan_row.get("annual_rate") or 0.0) / 100.0,
-        payments_df=payments_df.rename(columns={"payment_date": "payment_date", "amount": "amount"}),
+        payments_df=payments_df,
         late_fee_type=loan_row.get("late_fee_type", "fixed"),
         late_fee_amount=float(loan_row.get("late_fee_amount") or 0.0),
         late_fee_days=int(loan_row.get("late_fee_days") or 0),
         penalty_apr_decimal=(float(loan_row.get("penalty_interest_rate"))/100.0 if loan_row.get("penalty_interest_rate") else None),
     )
 
-    st.dataframe(
-        ledger,
+    df_to_show = ledger[[
+        "Payment Date", "Due Date", "Payment Amount",
+        "Allocated → Loan Interest", "Allocated → Principal",
+        "Principal Balance (End)"
+    ]] if mobile_view else ledger
+
+    compact_cols = st.checkbox("Compact column widths", value=True,
+                               help="Toggle to fit more columns without horizontal scrolling.")
+
+    column_widths = {
+        "Payment Date": 110, "Due Date": 110,
+        "Payment Amount": 110, "Accrued Loan Interest": 130,
+        "Penalty Interest Accrued": 150, "Late Fee (Assessed)": 130,
+        "Allocated → Penalty Interest": 150, "Allocated → Late Fees": 140,
+        "Allocated → Loan Interest": 150, "Allocated → Principal": 130,
+        "Principal Balance (End)": 160, "Late Fees Outstanding (End)": 180,
+        "Penalty Interest Outstanding (End)": 200
+    }
+    if compact_cols:
+        for k in column_widths:
+            column_widths[k] = max(100, int(column_widths[k] * 0.85))
+
+    st.data_editor(
+        df_to_show,
         use_container_width=True,
-        column_config={
-            "Payment Date": st.column_config.DateColumn(format="MM/DD/YYYY", width=110),
-            "Due Date": st.column_config.DateColumn(format="MM/DD/YYYY", width=110),
-            "Payment Amount": st.column_config.NumberColumn(format="$%.2f"),
-            "Accrued Loan Interest": st.column_config.NumberColumn(format="$%.2f"),
-            "Penalty Interest Accrued": st.column_config.NumberColumn(format="$%.2f"),
-            "Late Fee (Assessed)": st.column_config.NumberColumn(format="$%.2f"),
-            "Allocated → Penalty Interest": st.column_config.NumberColumn(format="$%.2f"),
-            "Allocated → Late Fees": st.column_config.NumberColumn(format="$%.2f"),
-            "Allocated → Loan Interest": st.column_config.NumberColumn(format="$%.2f"),
-            "Allocated → Principal": st.column_config.NumberColumn(format="$%.2f"),
-            "Principal Balance (End)": st.column_config.NumberColumn(format="$%.2f"),
-            "Late Fees Outstanding (End)": st.column_config.NumberColumn(format="$%.2f"),
-            "Penalty Interest Outstanding (End)": st.column_config.NumberColumn(format="$%.2f"),
-        },
         hide_index=True,
-        height=420
+        disabled=True,
+        height=480,
+        column_config={
+            "Payment Date": st.column_config.DateColumn(format="MM/DD/YYYY", width=column_widths["Payment Date"]),
+            "Due Date": st.column_config.DateColumn(format="MM/DD/YYYY", width=column_widths["Due Date"]),
+            "Payment Amount": st.column_config.NumberColumn(format="$%.2f", width=column_widths["Payment Amount"]),
+            "Accrued Loan Interest": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Accrued Loan Interest", 130)),
+            "Penalty Interest Accrued": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Penalty Interest Accrued", 150)),
+            "Late Fee (Assessed)": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Late Fee (Assessed)", 130)),
+            "Allocated → Penalty Interest": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Allocated → Penalty Interest", 150)),
+            "Allocated → Late Fees": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Allocated → Late Fees", 140)),
+            "Allocated → Loan Interest": st.column_config.NumberColumn(format="$%.2f", width=column_widths["Allocated → Loan Interest"]),
+            "Allocated → Principal": st.column_config.NumberColumn(format="$%.2f", width=column_widths["Allocated → Principal"]),
+            "Principal Balance (End)": st.column_config.NumberColumn(format="$%.2f", width=column_widths["Principal Balance (End)"]),
+            "Late Fees Outstanding (End)": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Late Fees Outstanding (End)", 180)),
+            "Penalty Interest Outstanding (End)": st.column_config.NumberColumn(format="$%.2f", width=column_widths.get("Penalty Interest Outstanding (End)", 200)),
+        },
+        key="ledger_grid_readonly"
     )
 
     if not ledger.empty:
@@ -799,11 +907,13 @@ def _common_loan_view(loan_row: dict, read_only: bool):
                                file_name=f"statement_{base}_{date.today().isoformat()}.pdf",
                                mime="application/pdf")
 
-
 # ---------------------------
 # App entry
 # ---------------------------
 def main():
+    _inject_global_css()
+    _restore_session_from_state()
+
     if not SUPABASE_OK:
         st.error("⚠️ Supabase connection failed. Check secrets configuration.")
         st.stop()
@@ -824,10 +934,12 @@ def main():
     token = borrower_token_from_query()
     role_hint = role_from_query()
 
+    # Borrower via token link (read-only)
     if role_hint == "borrower" and token:
         borrower_view_by_token(token)
         return
 
+    # Signed in
     if session and session.user:
         uid = session.user.id
         with st.sidebar:
@@ -835,15 +947,14 @@ def main():
             if st.button("🚪 Sign out", key="signout_main"):
                 sign_out()
                 st.rerun()
-
         if role_hint == "borrower":
             borrower_view_signed_in(uid)
         else:
             lender_view(uid)
         return
 
+    # Not signed in
     landing()
-
 
 if __name__ == "__main__":
     main()
