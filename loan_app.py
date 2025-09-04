@@ -107,7 +107,7 @@ def load_data(lender_email=None):
             if rows:
                 df = pd.DataFrame(rows)
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce)
+                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
                 # Don't drop rows during load - just ensure types are correct
                 loan["payments_df"] = df.reset_index(drop=True)
             else:
