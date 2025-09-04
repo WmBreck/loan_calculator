@@ -176,7 +176,7 @@ def validate_critical_features():
 def main_app():
     """Main application logic"""
     # Check authentication and determine user role
-    user_role, loan_name = check_authentication()
+    user_role, loan_name, token = check_authentication()
 
     if user_role == 'unauthenticated':
         # Show lender login
@@ -254,7 +254,7 @@ def main_app():
 # Main application entry point
 def run_app():
     # Check authentication and determine user role
-    user_role, loan_name = check_authentication()
+    user_role, loan_name, token = check_authentication()
 
     if user_role == 'unauthenticated':
         # Show lender login
