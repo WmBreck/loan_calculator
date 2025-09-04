@@ -1,18 +1,15 @@
 # loan_app.py
 # Shylock — Private Loan Servicing (MVP)
 # Streamlit + Supabase • Late Fees + Penalty Interest • ACT/365 simple interest
-# Uses loans.loan_name (fallback to legacy loans.name for display)
-# Uses modern st.query_params API only. Responsive header with embedded logo and wordmark colors matched to logo.
+# Uses loans.loan_name (with fallback to legacy loans.name for display).
 
 import streamlit as st
 st.set_page_config(page_title="Shylock — Private Loan Servicing", page_icon="💸", layout="wide")
 
 from io import BytesIO
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import secrets
-import base64
-from pathlib import Path as _Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -67,6 +64,7 @@ def sign_out():
         st.error(f"Sign out error: {e}")
 
 def qp_get(name, default=None):
+    # Modern Streamlit API only (no deprecated experimental calls)
     return st.query_params.get(name, default)
 
 def role_from_query() -> str | None:
@@ -74,6 +72,16 @@ def role_from_query() -> str | None:
 
 def borrower_token_from_query() -> str | None:
     return qp_get("token")
+# ---------------------------
+# Logo display
+# ---------------------------
+def display_logo():
+    """Display the Shylock logo at the top of each page"""
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("ShylockLogo.png", width=200, use_column_width=False)
+    st.divider()
+
 
 def set_role_in_url(role: str):
     st.session_state["role"] = role
@@ -81,103 +89,6 @@ def set_role_in_url(role: str):
         st.query_params["role"] = role
     except Exception:
         pass
-
-
-# ---------------------------
-# Responsive Header (wordmark + embedded logo + tagline)
-# ---------------------------
-def render_header(
-    logo_path: str = "ShylockLogo.png",
-    tagline: str = "The humane way to track private personal loans.",
-    shylock_color: str = "#00B050",  # green from dollar signs
-    online_color: str = "#E32636",   # red from IOU tiles
-):
-    logo_b64 = ""
-    p = _Path(logo_path)
-    if p.exists():
-        try:
-            logo_b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
-        except Exception:
-            logo_b64 = ""
-
-    st.markdown(
-        f"""
-<style>
-.shylock-header {{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem;
-  width: 100%;
-  padding: .5rem 0 .75rem 0;
-  flex-wrap: wrap;
-  border-bottom: 1px solid rgba(0,0,0,0.07);
-}}
-.shylock-wordmark {{
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1 1 auto;
-  min-width: 280px;
-  line-height: 1;
-}}
-.shylock-text {{
-  font-family: "Georgia", "Garamond", "Times New Roman", serif;
-  font-weight: 700;
-  letter-spacing: .5px;
-  display: inline-flex;
-  align-items: center;
-  gap: .8rem;
-  white-space: nowrap;
-}}
-.shylock-text .shylock {{
-  color: {shylock_color};
-  font-size: clamp(32px, 4vw, 48px);
-}}
-.shylock-text .online {{
-  color: {online_color};
-  font-size: clamp(32px, 4vw, 48px);
-}}
-.shylock-logo {{
-  display: inline-block;
-  width: clamp(36px, 4vw, 52px);
-  height: clamp(36px, 4vw, 52px);
-  object-fit: contain;
-  vertical-align: middle;
-}}
-.shylock-tagline {{
-  font-family: "Georgia", "Garamond", serif;
-  font-weight: 500;
-  font-size: clamp(12px, 1.6vw, 16px);
-  color: rgba(0,0,0,0.72);
-  margin-left: auto;
-  white-space: nowrap;
-}}
-@media (max-width: 900px) {{
-  .shylock-header {{ justify-content: center; }}
-  .shylock-tagline {{
-    width: 100%;
-    text-align: center;
-    white-space: normal;
-    margin-left: 0;
-    margin-top: .2rem;
-  }}
-}}
-</style>
-
-<div class="shylock-header">
-  <div class="shylock-wordmark">
-    <div class="shylock-text">
-      <span class="shylock">Shylock</span>
-      {"<img class='shylock-logo' src='data:image/png;base64," + logo_b64 + "' alt='logo'/>" if logo_b64 else ""}
-      <span class="online">Online</span>
-    </div>
-  </div>
-  <div class="shylock-tagline">{tagline}</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
 
 
 # ---------------------------
@@ -202,6 +113,7 @@ def loans_for_borrower_by_token(token: str) -> list[dict]:
 def loans_for_borrower_signed_in(user_id: str) -> list[dict]:
     """Optional join table loan_borrowers(user_id, loan_id). If absent, return []."""
     try:
+        # Probe existence
         supabase.table("loan_borrowers").select("loan_id").limit(1).execute()
         lb = supabase.table("loan_borrowers").select("loan_id").eq("user_id", user_id).execute().data or []
         loan_ids = [r["loan_id"] for r in lb]
@@ -276,42 +188,56 @@ def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------
 # Ledger math (ACT/365 simple) with Late Fees + Penalty Interest
 # ---------------------------
-from datetime import date as _date, timedelta as _timedelta
-
 def _dec(x) -> Decimal:
     return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-def _prev_due_date(orig: _date, when: _date) -> _date:
+def _prev_due_date(orig: date, when: date) -> date:
+    """Previous monthly due date anchored to origination day; clamps month-end properly."""
     months = (when.year - orig.year) * 12 + (when.month - orig.month)
     if when.day < orig.day:
         months -= 1
     y = orig.year + (orig.month - 1 + months) // 12
     m = ((orig.month - 1 + months) % 12) + 1
+    # Compute last day of month m in year y
     if m == 12:
-        last_day = (_date(y + 1, 1, 1) - _timedelta(days=1)).day
+        last_day = (date(y + 1, 1, 1) - timedelta(days=1)).day
     else:
-        last_day = (_date(y, m + 1, 1) - _timedelta(days=1)).day
+        last_day = (date(y, m + 1, 1) - timedelta(days=1)).day
     day = min(orig.day, last_day)
-    return _date(y, m, day)
+    return date(y, m, day)
 
 def compute_ledger(
     principal: float,
-    origination_date: _date,
+    origination_date: date,
     annual_rate_decimal: float,
     payments_df: pd.DataFrame,
     *,
-    late_fee_type: str = "fixed",
-    late_fee_amount: float = 0.0,
-    late_fee_days: int = 0,
-    penalty_apr_decimal: float | None = None,
+    late_fee_type: str = "fixed",              # "fixed" | "percent"
+    late_fee_amount: float = 0.0,              # fixed $ or percent number
+    late_fee_days: int = 0,                    # grace period days
+    penalty_apr_decimal: float | None = None,  # if None, use loan APR
 ) -> pd.DataFrame:
+    """
+    Produces a ledger with columns:
+      Due Date, Payment Date, Payment Amount, Accrued Loan Interest, Penalty Interest Accrued,
+      Late Fee (Assessed), Allocated → Penalty Interest, Allocated → Late Fees,
+      Allocated → Loan Interest, Allocated → Principal, Principal Balance (End),
+      Late Fees Outstanding (End), Penalty Interest Outstanding (End)
+    Rules:
+      - ACT/365 simple interest on principal only
+      - Unpaid loan interest is carried (does NOT itself accrue interest)
+      - Late fees accrue penalty interest daily (no compounding of that interest bucket)
+      - Allocation order: Penalty Int → Late Fees → Loan Interest → Principal
+      - Late fee assessment: if payment_date > (due_date + grace)
+        * percent late fee is percent of a reference "scheduled" payment (here: interest-only proxy)
+    """
     df = clean_payments_df(payments_df)
     df = df[df["payment_date"] >= origination_date].sort_values("payment_date").reset_index(drop=True)
 
-    bal_p = _dec(principal)
-    out_late = _dec(0)
-    out_pen_i = _dec(0)
-    loan_i_carry = _dec(0)
+    bal_p = _dec(principal)                # principal balance
+    out_late = _dec(0)                     # outstanding late-fee principal
+    out_pen_i = _dec(0)                    # outstanding penalty interest
+    loan_i_carry = _dec(0)                 # unpaid loan interest (does not accrue interest)
     last_event_date = origination_date
 
     apr_p = Decimal(str(annual_rate_decimal))
@@ -322,18 +248,21 @@ def compute_ledger(
     for _, r in df.iterrows():
         pay_dt = r["payment_date"]
         pay_amt = _dec(r["amount"])
+
+        # Determine most recent due date relative to payment
         due_dt = _prev_due_date(origination_date, pay_dt)
 
-        # 1) Loan interest accrual since last event
+        # 1) Accrue loan interest on principal since last event
         days_loan = max((pay_dt - last_event_date).days, 0)
         accrued_loan_i = (bal_p * apr_p * Decimal(days_loan) / Decimal(365)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         loan_i_due = (accrued_loan_i + loan_i_carry).quantize(Decimal("0.01"))
 
-        # 2) Assess late fee
+        # 2) Maybe assess new late fee (MVP: at most one per payment event)
         new_late_fee = _dec(0)
         if late_fee_days is not None and late_fee_days >= 0:
             if pay_dt > (due_dt + timedelta(days=int(late_fee_days))):
                 if late_fee_type == "percent":
+                    # reference = interest-only proxy (monthly)
                     ref = (bal_p * apr_p / Decimal(12)).quantize(Decimal("0.01"))
                     new_late_fee = (ref * Decimal(late_fee_amount) / Decimal(100)).quantize(Decimal("0.01"))
                 else:
@@ -341,24 +270,27 @@ def compute_ledger(
                 if new_late_fee > 0:
                     out_late = (out_late + new_late_fee).quantize(Decimal("0.01"))
 
-        # 3) Penalty interest accrual on outstanding late fees
+        # 3) Accrue penalty interest on outstanding late-fee principal since last event
         days_pen = max((pay_dt - last_event_date).days, 0)
         accrued_pen_i = (out_late * apr_pen * Decimal(days_pen) / Decimal(365)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         out_pen_i = (out_pen_i + accrued_pen_i).quantize(Decimal("0.01"))
 
-        # 4) Allocation order
+        # 4) Allocate payment
         remaining = pay_amt
+
         alloc_pen_i = min(remaining, out_pen_i); remaining -= alloc_pen_i; out_pen_i -= alloc_pen_i
         alloc_late  = min(remaining, out_late);  remaining -= alloc_late;  out_late  -= alloc_late
         alloc_loan_i = min(remaining, loan_i_due); remaining -= alloc_loan_i; loan_i_due -= alloc_loan_i
         alloc_prin  = remaining; remaining = _dec(0); bal_p = (bal_p - alloc_prin).quantize(Decimal("0.01"))
+
+        # Remaining unpaid loan interest becomes new carry (no compounding)
         loan_i_carry = loan_i_due
 
         rows.append({
             "Payment Date": pay_dt,
             "Due Date": due_dt,
             "Payment Amount": (alloc_pen_i + alloc_late + alloc_loan_i + alloc_prin),
-            "Accrued Loan Interest": (accrued_loan_i + loan_i_carry),
+            "Accrued Loan Interest": (accrued_loan_i + loan_i_carry),  # what accrued incl. any unpaid carry
             "Penalty Interest Accrued": accrued_pen_i,
             "Late Fee (Assessed)": new_late_fee,
             "Allocated → Penalty Interest": alloc_pen_i,
@@ -404,6 +336,7 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
         "",
     ]
 
+    # Compute summary totals
     if not ledger.empty:
         begin_prin = float(ledger.iloc[0]["Principal Balance (End)"] + ledger.iloc[0]["Allocated → Principal"])
         end_prin = float(ledger.iloc[-1]["Principal Balance (End)"])
@@ -482,8 +415,8 @@ def build_pdf_from_ledger(ledger: pd.DataFrame, loan_meta: dict) -> bytes:
 # UI: Landing
 # ---------------------------
 def landing():
-    render_header()
-    st.title("Welcome")
+     display_logo()  # Add logo here
+     st.title("Shylock — Private Loan Servicing")
     st.write("Track irregular payments, allocate interest/fees/principal correctly, and export clean statements.")
     c1, c2 = st.columns(2)
     with c1:
@@ -525,6 +458,7 @@ def landing():
                         res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
                         st.session_state["session"] = res.session
                         st.success(f"✅ Signed in as {email}")
+                        # Ensure profile exists (profiles.id == auth.users.id)
                         try:
                             uid = res.user.id
                             prof = supabase.table("profiles").select("id").eq("id", uid).single().execute()
@@ -553,8 +487,8 @@ def landing():
 # UI: Borrower Views
 # ---------------------------
 def borrower_view_by_token(token: str):
-    render_header()
-    rows = loans_for_borrower_by_token(token)
+     display_logo()  # Add logo here
+     rows = loans_for_borrower_by_token(token)
     if not rows:
         st.error("Invalid or expired borrower link.")
         return
@@ -564,7 +498,7 @@ def borrower_view_by_token(token: str):
     _common_loan_view(loan, read_only=True)
 
 def borrower_view_signed_in(user_id: str):
-    render_header()
+    display_logo()  # Add logo here
     rows = loans_for_borrower_signed_in(user_id)
     st.title("📋 Your Loans (Borrower)")
     if not rows:
@@ -580,10 +514,11 @@ def borrower_view_signed_in(user_id: str):
 # UI: Lender View
 # ---------------------------
 def lender_view(user_id: str):
-    render_header()
-    st.title("💸 Manage Loans & Statements")
+     display_logo()  # Add logo here
+     st.title("💸 Manage Loans & Statements")
     st.caption("Irregular payments • ACT/365 simple interest • Late fees + penalty interest")
 
+    # Company banner
     try:
         user_profile = supabase.table("profiles").select("company_name").eq("id", user_id).single().execute()
         company_name = user_profile.data.get("company_name", "Your Company") if user_profile.data else "Your Company"
@@ -593,6 +528,7 @@ def lender_view(user_id: str):
 
     loans = loans_for_lender(user_id)
 
+    # Toolbar
     t1, t2, t3 = st.columns([1.5, 1, 1])
     with t1:
         if st.button("➕ New Loan"):
@@ -601,13 +537,13 @@ def lender_view(user_id: str):
                 new = {
                     "lender_id": user_id,
                     "lender_name": lender_name,
-                    "loan_name": f"Loan {len(loans)+1}",
+                    "loan_name": f"Loan {len(loans)+1}",   # use loan_name (not name)
                     "principal": 100000.0,
                     "origination_date": date.today().isoformat(),
-                    "annual_rate": 5.0,
+                    "annual_rate": 5.0,  # percent
                     "term_years": 30,
                     "borrower_name": "To be set",
-                    "borrower_email": "to_be_set@example.com",
+                   "borrower_email": "to_be_set@example.com",  # Add this line to fix database constraint
                     "borrower_token": secrets.token_urlsafe(24),
                 }
                 upsert_loan(new)
@@ -633,6 +569,7 @@ def lender_view(user_id: str):
     )
     loan = loans[sel]
 
+    # Sidebar: Loan terms incl. Late Fee settings
     with st.sidebar:
         st.header("💰 Loan Terms")
         name_val = loan.get("loan_name") or loan.get("name","")
@@ -660,7 +597,7 @@ def lender_view(user_id: str):
 
         if st.button("💾 Save Loan"):
             loan.update({
-                "loan_name": name,
+                "loan_name": name,   # save as loan_name
                 "borrower_name": borrower_name,
                 "principal": principal,
                 "origination_date": origination_date.isoformat(),
@@ -740,6 +677,7 @@ def _common_loan_view(loan_row: dict, read_only: bool):
     label = loan_row.get('loan_name') or loan_row.get('name') or 'Loan'
     st.subheader(f"Ledger — {label} (Late Fees + Penalty Interest) — ACT/365")
 
+    # Compute ledger
     ledger = compute_ledger(
         principal=float(loan_row.get("principal") or 0.0),
         origination_date=pd.to_datetime(loan_row.get("origination_date")).date() if loan_row.get("origination_date") else date.today(),
@@ -751,6 +689,7 @@ def _common_loan_view(loan_row: dict, read_only: bool):
         penalty_apr_decimal=(float(loan_row.get("penalty_interest_rate"))/100.0 if loan_row.get("penalty_interest_rate") else None),
     )
 
+    # Display ledger
     st.dataframe(
         ledger,
         use_container_width=True,
@@ -773,6 +712,7 @@ def _common_loan_view(loan_row: dict, read_only: bool):
         height=420
     )
 
+    # Metrics (current status)
     if not ledger.empty:
         last_row = ledger.iloc[-1]
         c1, c2, c3, c4 = st.columns(4)
@@ -808,6 +748,7 @@ def main():
         st.error("⚠️ Supabase connection failed. Check secrets configuration.")
         st.stop()
 
+    # Handle Supabase redirect tokens (magic link / oauth)
     qp = dict(st.query_params)
     if "access_token" in qp or "refresh_token" in qp:
         st.info("🔄 Processing authentication...")
@@ -824,10 +765,12 @@ def main():
     token = borrower_token_from_query()
     role_hint = role_from_query()
 
+    # Borrower via token (no auth)
     if role_hint == "borrower" and token:
         borrower_view_by_token(token)
         return
 
+    # Signed-in flows
     if session and session.user:
         uid = session.user.id
         with st.sidebar:
@@ -842,6 +785,7 @@ def main():
             lender_view(uid)
         return
 
+    # Otherwise landing
     landing()
 
 
