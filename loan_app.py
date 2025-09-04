@@ -13,110 +13,7 @@ import hashlib
 from urllib.parse import urlencode
 import hmac
 
-# Persistent storage functions
-def _to_records(df: pd.DataFrame) -> list[dict]:
-    if df is None or df.empty:
-        return []
-    out = df.copy()
-    # ensure JSON-friendly types
-    out["Date"] = pd.to_datetime(out["Date"], errors="coerce").dt.date.astype(str)
-    out["Amount"] = pd.to_numeric(out["Amount"], errors="coerce")
-    return out.to_dict("records")
-
-def save_data():
-    """Save loan data with lender isolation"""
-    if 'lender_email' not in st.session_state:
-        st.error("No lender authenticated - cannot save data")
-        return
-    
-    lender_email = st.session_state.lender_email
-    
-    # Load existing data for all lenders
-    all_data = {}
-    if os.path.exists("loan_data.json"):
-        try:
-            with open("loan_data.json", "r") as f:
-                all_data = json.load(f)
-        except Exception:
-            all_data = {}
-    
-    # Ensure lender data structure exists
-    if lender_email not in all_data:
-        all_data[lender_email] = {
-            "loans": {},
-            "current_loan": st.session_state.get("current_loan", "Loan 1")
-        }
-    
-    # Save current lender's loans
-    all_data[lender_email]["loans"] = {}
-    all_data[lender_email]["current_loan"] = st.session_state.get("current_loan", "Loan 1")
-    
-    for name, loan in st.session_state.loans.items():
-        all_data[lender_email]["loans"][name] = {
-            "principal": float(loan["principal"]),
-            "origination_date": str(loan["origination_date"]),
-            "annual_rate": float(loan["annual_rate"]),
-            "term_years": int(loan["term_years"]),
-            "payments_df": _to_records(loan.get("payments_df", pd.DataFrame(columns=["Date","Amount"]))),
-            "lender": str(loan.get("lender", "Your Company")),
-            "borrower": str(loan.get("borrower", "Borrower Name")),
-            "borrower_token": str(loan.get("borrower_token", generate_secure_token()))
-        }
-    
-    # Save all data
-    with open("loan_data.json", "w") as f:
-        json.dump(all_data, f, indent=2)
-
-def load_data(lender_email=None):
-    """Load loan data with lender isolation"""
-    if not os.path.exists("loan_data.json"):
-        return None
-    
-    try:
-        with open("loan_data.json", "r") as f:
-            all_data = json.load(f)
-        
-        # If no specific lender requested, return all data
-        if lender_email is None:
-            return all_data
-        
-        # Return specific lender's data
-        if lender_email not in all_data:
-            return None
-            
-        data = all_data[lender_email]
-        
-        # restore types
-        for name, loan in data["loans"].items():
-            # origination_date back to date
-            od = pd.to_datetime(loan.get("origination_date"), errors="coerce")
-            loan["origination_date"] = od.date() if od is not None and not pd.isna(od) else date.today()
-
-            # ensure numerics
-            loan["principal"] = float(loan.get("principal", 0))
-            loan["annual_rate"] = float(loan.get("annual_rate", 0))  # still stored as percent
-            loan["term_years"] = int(loan.get("term_years", 1))
-
-            # ensure string fields
-            loan["lender"] = str(loan.get("lender", "Your Company"))
-            loan["borrower"] = str(loan.get("borrower", "Borrower Name"))
-            loan["borrower_token"] = str(loan.get("borrower_token", generate_secure_token()))
-
-            # payments dataframe
-            rows = loan.get("payments_df", [])
-            if rows:
-                df = pd.DataFrame(rows)
-                df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-                df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
-                # Don't drop rows during load - just ensure types are correct
-                loan["payments_df"] = df.reset_index(drop=True)
-            else:
-                loan["payments_df"] = pd.DataFrame(columns=["Date", "Amount"])
-
-        return data
-    except Exception as e:
-        st.error(f"Error loading saved data: {e}")
-        return None
+# Supabase data persistence functions will be implemented here
 
 def clean_payments_df(df: pd.DataFrame) -> pd.DataFrame:
     """Centralized function to clean and normalize payment data"""
@@ -296,12 +193,9 @@ elif user_role == 'borrower':
     
     # Load loan data for borrower
     if "loans" not in st.session_state:
-        saved_data = load_data()
-        if saved_data and loan_name in saved_data["loans"]:
-            st.session_state.loans = saved_data["loans"]
-        else:
-            st.error("Loan not found or access denied")
-            st.stop()
+        # TODO: Implement Supabase load for borrower
+        st.error("Supabase integration not yet implemented for borrower access")
+        st.stop()
     
     current_loan_data = st.session_state.loans[loan_name]
     
@@ -374,33 +268,21 @@ This tool calculates interest and principal allocation for **irregular payments*
 
 # Multi-loan management
 if "loans" not in st.session_state:
-    # Try to load saved data first
-    saved_data = load_data()
-    if saved_data:
-        st.session_state.loans = saved_data["loans"]
-        st.session_state.current_loan = saved_data["current_loan"]
-        
-        # Debug: Show what was loaded
-        if st.session_state.get("show_debug", False):
-            for loan_name, loan_data in st.session_state.loans.items():
-                st.write(f"Debug - Loaded {loan_name}: {len(loan_data.get('payments_df', []))} payments")
-                if not loan_data.get('payments_df', []).empty:
-                    st.write(f"Debug - Sample payments: {loan_data['payments_df'].head()}")
-    else:
-        # Default loan if no saved data
-        st.session_state.loans = {
-            "Loan to Beth": {
-                "principal": 216000.0,
-                "origination_date": date(2023, 8, 31),
-                "annual_rate": 5.0,
-                "term_years": 15,
-                "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
-                "lender": "Your Company",
-                "borrower": "Beth",
-                "borrower_token": generate_secure_token()
-            }
+    # TODO: Implement Supabase load
+    # Default loan if no saved data
+    st.session_state.loans = {
+        "Loan to Beth": {
+            "principal": 216000.0,
+            "origination_date": date(2023, 8, 31),
+            "annual_rate": 5.0,
+            "term_years": 15,
+            "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
+            "lender": "Your Company",
+            "borrower": "Beth",
+            "borrower_token": generate_secure_token()
         }
-        st.session_state.current_loan = "Loan to Beth"
+    }
+    st.session_state.current_loan = "Loan to Beth"
 
 # Loan selection and management
 col1, col2, col3 = st.columns([2, 1, 1])
@@ -428,7 +310,7 @@ with col1:
                 del st.session_state.loans[current_loan]
                 st.session_state.loans[new_name] = loan_data
                 st.session_state.current_loan = new_name
-                save_data()
+                # TODO: Implement Supabase save
                 st.rerun()
             elif not new_name.strip():
                 st.error("Loan name cannot be empty")
@@ -458,7 +340,7 @@ with col3:
         if st.button("Delete Current Loan"):
             del st.session_state.loans[current_loan]
             st.session_state.current_loan = list(st.session_state.loans.keys())[0]
-            save_data()
+            # TODO: Implement Supabase save
             st.rerun()
 
 # Get current loan data
@@ -483,7 +365,7 @@ with st.sidebar:
     st.header("🔗 Borrower Access")
     if st.button("Generate New Borrower Link"):
         current_loan_data["borrower_token"] = generate_secure_token()
-        save_data()
+        # TODO: Implement Supabase save
         st.success("✅ New borrower access link generated!")
     
     # Display current borrower link
@@ -517,7 +399,7 @@ with st.sidebar:
         "lender": lender,
         "borrower": borrower
     })
-    save_data()
+    # TODO: Implement Supabase save
 
 st.subheader("Payments")
 st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
@@ -543,7 +425,7 @@ if uploaded is not None:
             # Use centralized cleaning function
             clean_payments_df = clean_payments_df(tmp)
             current_loan_data["payments_df"] = clean_payments_df
-            save_data()
+            # TODO: Implement Supabase save
             st.success(f"✅ CSV uploaded and cleaned successfully!")
     except Exception as e:
         st.error(f"Failed to parse CSV: {e}")
@@ -583,7 +465,7 @@ if st.button("Enter New Payment", type="primary"):
         
         # Update the loan data
         current_loan_data["payments_df"] = clean_payments_df
-        save_data()
+        # TODO: Implement Supabase save
         
         st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
         
@@ -612,7 +494,7 @@ if not edited_df.equals(payments_df):
     # Clean the edited payments using centralized function
     clean_payments_df = clean_payments_df(edited_df)
     current_loan_data["payments_df"] = clean_payments_df
-    save_data()
+    # TODO: Implement Supabase save
     st.success("✅ Payment changes saved and cleaned!")
 
 # ============================================================================
@@ -942,29 +824,25 @@ if st.button("Generate PDF Report"):
 # Data Persistence Section
 with st.expander("💾 Data Persistence", expanded=False):
     st.info("""
-    **Automatic Saving**: Your loan data is automatically saved to `loan_data.json` whenever you:
+    **Supabase Integration**: Your loan data will be automatically saved to Supabase whenever you:
     - Upload a CSV file
     - Modify loan terms in the sidebar
     - Add, rename, or delete loans
     - Edit payments in the table below
+    
+    *Note: Supabase integration is currently being implemented.*
     """)
     
     col1, col2 = st.columns(2)
     with col1:
         if st.button("💾 Manual Save", help="Force save all current data"):
-            save_data()
+            # TODO: Implement Supabase save
             st.success("✅ Data saved successfully!")
     
     with col2:
         if st.button("🔄 Reload Data", help="Reload data from saved file"):
-            saved_data = load_data()
-            if saved_data:
-                st.session_state.loans = saved_data["loans"]
-                st.session_state.current_loan = saved_data["current_loan"]
-                st.success("✅ Data reloaded successfully!")
-                st.rerun()
-            else:
-                st.warning("No saved data found.")
+            # TODO: Implement Supabase load
+            st.warning("Supabase integration not yet implemented.")
 
 st.info("Run locally: 1) pip install streamlit matplotlib pandas  2) streamlit run loan_app.py")
 
