@@ -1,9 +1,13 @@
+# ===============================
 # Python
+# ===============================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Packaging / build
 build/
 develop-eggs/
 dist/
@@ -21,31 +25,75 @@ wheels/
 *.egg
 MANIFEST
 
+# Notebooks
+.ipynb_checkpoints/
+
+# Test / coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+.pytest_cache/
+pytest_cache/
+.cache/
+
+# Logs
+*.log
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# ===============================
 # Virtual environments
+# ===============================
 venv/
 env/
 ENV/
 .venv/
 .env/
 
-# IDE
+# ===============================
+# IDE / Editor
+# ===============================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# ===============================
+# OS files
+# ===============================
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+.AppleDouble
+.LSOverride
+
+# Windows
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
+# ===============================
 # Streamlit
+# ===============================
 .streamlit/
+# (keep your real secrets untracked; commit a template if needed)
+# .streamlit/secrets.toml
+# .streamlit/config.toml
 
-# Data files (optional - remove if you want to include sample data)
-# loan_data.json
+# ===============================
+# Project-specific
+# ===============================
+# Generated reports/artifacts
+*.pdf
+*.bak
+*.tmp
+*.orig
