@@ -175,81 +175,161 @@ def validate_critical_features():
     
     return True
 
-# Check authentication and determine user role
-user_role, loan_name = check_authentication()
+def main_app():
+    """Main application logic"""
+    # Check authentication and determine user role
+    user_role, loan_name = check_authentication()
 
-if user_role == 'unauthenticated':
-    # Show lender login
-    lender_login()
-    st.title("💸 Loan Payment Calculator & Report")
-    st.info("🔐 Please authenticate as a lender to access loan management features.")
-    st.stop()
-
-elif user_role == 'borrower':
-    # Borrower view - read only
-    st.title("📋 Loan Statement - Borrower View")
-    st.info(f"🔗 Viewing loan: {loan_name}")
-    st.warning("📖 This is a read-only view. Contact your lender for any changes.")
-    
-    # Load loan data for borrower
-    if "loans" not in st.session_state:
-        # TODO: Implement Supabase load for borrower
-        st.error("Supabase integration not yet implemented for borrower access")
+    if user_role == 'unauthenticated':
+        # Show lender login
+        lender_login()
+        st.title("💸 Loan Payment Calculator & Report")
+        st.info("🔐 Please authenticate as a lender to access loan management features.")
         st.stop()
-    
-    current_loan_data = st.session_state.loans[loan_name]
-    
-    # Show borrower information
-    with st.sidebar:
-        st.header("📋 Loan Information")
-        st.metric("Principal", f"${current_loan_data['principal']:,.2f}")
-        st.metric("Interest Rate", f"{current_loan_data['annual_rate']:.3f}%")
-        st.metric("Origination Date", current_loan_data['origination_date'].strftime('%m/%d/%Y'))
-        st.metric("Term", f"{current_loan_data['term_years']} years")
-        
-        # Show current status
-        if not current_loan_data['payments_df'].empty:
-            last_payment = current_loan_data['payments_df'].iloc[-1]
-            days_since = (date.today() - last_payment['Date']).days
-            st.metric("Days Since Last Payment", days_since)
-            st.metric("Last Payment", f"${last_payment['Amount']:.2f}")
-    
-    # Calculate and show schedule for borrower
-    if st.button("Calculate & Show Tables", type="primary"):
-        df = compute_schedule(
-            current_loan_data["principal"],
-            current_loan_data["origination_date"],
-            current_loan_data["annual_rate"],
-            current_loan_data["payments_df"]
-        )
-        
-        if not df.empty:
-            st.subheader("Payment Schedule")
-            st.dataframe(df, use_container_width=True)
-            
-            # PDF export for borrower
-            if st.button("📄 Export PDF Report"):
-                pdf_bytes = build_pdf(
-                    df, 
-                    current_loan_data["principal"],
-                    current_loan_data["origination_date"],
-                    current_loan_data["annual_rate"],
-                    current_loan_data["term_years"]
-                )
-                st.download_button(
-                    label="📥 Download PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"loan_statement_{loan_name}_{date.today().strftime('%Y%m%d')}.pdf",
-                    mime="application/pdf"
-                )
-        else:
-            st.warning("No payment data available")
-    
-    st.stop()
 
-else:
-    # Lender view - full access
-    st.title("💸 Loan Payment Calculator & Report")
+    elif user_role == 'borrower':
+        # Borrower view - read only
+        st.title("📋 Loan Statement - Borrower View")
+        st.info(f"🔗 Viewing loan: {loan_name}")
+        st.warning("📖 This is a read-only view. Contact your lender for any changes.")
+        
+        # Load loan data for borrower
+        if "loans" not in st.session_state:
+            # TODO: Implement Supabase load for borrower
+            st.error("Supabase integration not yet implemented for borrower access")
+            st.stop()
+        
+        current_loan_data = st.session_state.loans[loan_name]
+        
+        # Show borrower information
+        with st.sidebar:
+            st.header("📋 Loan Information")
+            st.metric("Principal", f"${current_loan_data['principal']:,.2f}")
+            st.metric("Interest Rate", f"{current_loan_data['annual_rate']:.3f}%")
+            st.metric("Origination Date", current_loan_data['origination_date'].strftime('%m/%d/%Y'))
+            st.metric("Term", f"{current_loan_data['term_years']} years")
+            
+            # Show current status
+            if not current_loan_data['payments_df'].empty:
+                last_payment = current_loan_data['payments_df'].iloc[-1]
+                days_since = (date.today() - last_payment['Date']).days
+                st.metric("Days Since Last Payment", days_since)
+                st.metric("Last Payment", f"${last_payment['Amount']:.2f}")
+        
+        # Calculate and show schedule for borrower
+        if st.button("Calculate & Show Tables", type="primary"):
+            df = compute_schedule(
+                current_loan_data["principal"],
+                current_loan_data["origination_date"],
+                current_loan_data["annual_rate"],
+                current_loan_data["payments_df"]
+            )
+            
+            if not df.empty:
+                st.subheader("Payment Schedule")
+                st.dataframe(df, use_container_width=True)
+                
+                # PDF export for borrower
+                if st.button("📄 Export PDF Report"):
+                    pdf_bytes = build_pdf(
+                        df, 
+                        current_loan_data["principal"],
+                        current_loan_data["origination_date"],
+                        current_loan_data["annual_rate"],
+                        current_loan_data["term_years"]
+                    )
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=pdf_bytes,
+                        file_name=f"loan_statement_{loan_name}_{date.today().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.warning("No payment data available")
+        
+        st.stop()
+
+    else:
+        # Lender view - full access
+        st.title("💸 Loan Payment Calculator & Report")
+
+# Main application entry point
+def run_app():
+    # Check authentication and determine user role
+    user_role, loan_name = check_authentication()
+
+    if user_role == 'unauthenticated':
+        # Show lender login
+        lender_login()
+        st.title("💸 Loan Payment Calculator & Report")
+        st.info("🔐 Please authenticate as a lender to access loan management features.")
+        st.stop()
+
+    elif user_role == 'borrower':
+        # Borrower view - read only
+        st.title("📋 Loan Statement - Borrower View")
+        st.info(f"🔗 Viewing loan: {loan_name}")
+        st.warning("📖 This is a read-only view. Contact your lender for any changes.")
+        
+        # Load loan data for borrower
+        if "loans" not in st.session_state:
+            # TODO: Implement Supabase load for borrower
+            st.error("Supabase integration not yet implemented for borrower access")
+            st.stop()
+        
+        current_loan_data = st.session_state.loans[loan_name]
+        
+        # Show borrower information
+        with st.sidebar:
+            st.header("📋 Loan Information")
+            st.metric("Principal", f"${current_loan_data['principal']:,.2f}")
+            st.metric("Interest Rate", f"{current_loan_data['annual_rate']:.3f}%")
+            st.metric("Origination Date", current_loan_data['origination_date'].strftime('%m/%d/%Y'))
+            st.metric("Term", f"{current_loan_data['term_years']} years")
+            
+            # Show current status
+            if not current_loan_data['payments_df'].empty:
+                last_payment = current_loan_data['payments_df'].iloc[-1]
+                days_since = (date.today() - last_payment['Date']).days
+                st.metric("Days Since Last Payment", days_since)
+                st.metric("Last Payment", f"${last_payment['Amount']:.2f}")
+        
+        # Calculate and show schedule for borrower
+        if st.button("Calculate & Show Tables", type="primary"):
+            df = compute_schedule(
+                current_loan_data["principal"],
+                current_loan_data["origination_date"],
+                current_loan_data["annual_rate"],
+                current_loan_data["payments_df"]
+            )
+            
+            if not df.empty:
+                st.subheader("Payment Schedule")
+                st.dataframe(df, use_container_width=True)
+                
+                # PDF export for borrower
+                if st.button("📄 Export PDF Report"):
+                    pdf_bytes = build_pdf(
+                        df, 
+                        current_loan_data["principal"],
+                        current_loan_data["origination_date"],
+                        current_loan_data["annual_rate"],
+                        current_loan_data["term_years"]
+                    )
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=pdf_bytes,
+                        file_name=f"loan_statement_{loan_name}_{date.today().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.warning("No payment data available")
+        
+        st.stop()
+
+    else:
+        # Lender view - full access
+        st.title("💸 Loan Payment Calculator & Report")
 
 st.markdown("""
 This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
@@ -852,3 +932,6 @@ st.info("Run locally: 1) pip install streamlit matplotlib pandas  2) streamlit r
 # Validate critical features after all functions are defined
 if not validate_critical_features():
     st.stop()
+
+# Run the main application
+run_app()
