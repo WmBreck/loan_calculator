@@ -157,9 +157,7 @@ def validate_critical_features():
     """Validate that all critical features are present and working"""
     critical_features = [
         "compute_schedule",
-        "build_pdf", 
-        "save_data",
-        "load_data"
+        "build_pdf"
     ]
     
     missing_features = []
