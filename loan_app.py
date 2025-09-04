@@ -173,84 +173,6 @@ def validate_critical_features():
     
     return True
 
-def main_app():
-    """Main application logic"""
-    # Check authentication and determine user role
-    user_role, loan_name, token = check_authentication()
-
-    if user_role == 'unauthenticated':
-        # Show lender login
-        lender_login()
-        st.title("💸 Loan Payment Calculator & Report")
-        st.info("🔐 Please authenticate as a lender to access loan management features.")
-        st.stop()
-
-    elif user_role == 'borrower':
-        # Borrower view - read only
-        st.title("📋 Loan Statement - Borrower View")
-        st.info(f"🔗 Viewing loan: {loan_name}")
-        st.warning("📖 This is a read-only view. Contact your lender for any changes.")
-        
-        # Load loan data for borrower
-        if "loans" not in st.session_state:
-            # TODO: Implement Supabase load for borrower
-            st.error("Supabase integration not yet implemented for borrower access")
-            st.stop()
-        
-        current_loan_data = st.session_state.loans[loan_name]
-        
-        # Show borrower information
-        with st.sidebar:
-            st.header("📋 Loan Information")
-            st.metric("Principal", f"${current_loan_data['principal']:,.2f}")
-            st.metric("Interest Rate", f"{current_loan_data['annual_rate']:.3f}%")
-            st.metric("Origination Date", current_loan_data['origination_date'].strftime('%m/%d/%Y'))
-            st.metric("Term", f"{current_loan_data['term_years']} years")
-            
-            # Show current status
-            if not current_loan_data['payments_df'].empty:
-                last_payment = current_loan_data['payments_df'].iloc[-1]
-                days_since = (date.today() - last_payment['Date']).days
-                st.metric("Days Since Last Payment", days_since)
-                st.metric("Last Payment", f"${last_payment['Amount']:.2f}")
-        
-        # Calculate and show schedule for borrower
-        if st.button("Calculate & Show Tables", type="primary"):
-            df = compute_schedule(
-                current_loan_data["principal"],
-                current_loan_data["origination_date"],
-                current_loan_data["annual_rate"],
-                current_loan_data["payments_df"]
-            )
-            
-            if not df.empty:
-                st.subheader("Payment Schedule")
-                st.dataframe(df, use_container_width=True)
-                
-                # PDF export for borrower
-                if st.button("📄 Export PDF Report"):
-                    pdf_bytes = build_pdf(
-                        df, 
-                        current_loan_data["principal"],
-                        current_loan_data["origination_date"],
-                        current_loan_data["annual_rate"],
-                        current_loan_data["term_years"]
-                    )
-                    st.download_button(
-                        label="📥 Download PDF Report",
-                        data=pdf_bytes,
-                        file_name=f"loan_statement_{loan_name}_{date.today().strftime('%Y%m%d')}.pdf",
-                        mime="application/pdf"
-                    )
-            else:
-                st.warning("No payment data available")
-        
-        st.stop()
-
-    else:
-        # Lender view - full access
-        st.title("💸 Loan Payment Calculator & Report")
-
 # Main application entry point
 def run_app():
     # Check authentication and determine user role
@@ -328,601 +250,528 @@ def run_app():
     else:
         # Lender view - full access
         st.title("💸 Loan Payment Calculator & Report")
+        
+        st.markdown("""
+        This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
+        - Interest accrues daily on principal only.
+        - Each payment is applied to **accrued interest first**, then to principal.
+        - Unpaid interest (if any) is carried but **does not compound**.
+        - Export a dated PDF report for sharing.
+        """)
 
-st.markdown("""
-This tool calculates interest and principal allocation for **irregular payments** using **Actual/365 simple interest**.
-- Interest accrues daily on principal only.
-- Each payment is applied to **accrued interest first**, then to principal.
-- Unpaid interest (if any) is carried but **does not compound**.
-- Export a dated PDF report for sharing.
-""")
+        # ============================================================================
+        # CRITICAL SECTION: Multi-loan Management System
+        # ============================================================================
+        # DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+        # This section handles loan creation, selection, and persistence
+        # ============================================================================
 
-# ============================================================================
-# CRITICAL SECTION: Multi-loan Management System
-# ============================================================================
-# DO NOT MODIFY THIS SECTION WITHOUT UPDATING FEATURE_CHECKLIST.md
-# This section handles loan creation, selection, and persistence
-# ============================================================================
+        # Multi-loan management
+        if "loans" not in st.session_state:
+            # TODO: Implement Supabase load
+            # Default loan if no saved data
+            st.session_state.loans = {
+                "Loan to Beth": {
+                    "principal": 216000.0,
+                    "origination_date": date(2023, 8, 31),
+                    "annual_rate": 5.0,
+                    "term_years": 15,
+                    "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
+                    "lender": "Your Company",
+                    "borrower": "Beth",
+                    "borrower_token": generate_secure_token()
+                }
+            }
+            st.session_state.current_loan = "Loan to Beth"
 
-# Multi-loan management
-if "loans" not in st.session_state:
-    # TODO: Implement Supabase load
-    # Default loan if no saved data
-    st.session_state.loans = {
-        "Loan to Beth": {
-            "principal": 216000.0,
-            "origination_date": date(2023, 8, 31),
-            "annual_rate": 5.0,
-            "term_years": 15,
-            "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
-            "lender": "Your Company",
-            "borrower": "Beth",
-            "borrower_token": generate_secure_token()
-        }
-    }
-    st.session_state.current_loan = "Loan to Beth"
+        # Loan selection and management
+        col1, col2, col3 = st.columns([2, 1, 1])
 
-# Loan selection and management
-col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            current_loan = st.selectbox(
+                "Select Loan",
+                options=list(st.session_state.loans.keys()),
+                key="loan_selector"
+            )
+            st.session_state.current_loan = current_loan
+            
+            # Loan renaming feature
+            with st.expander("Rename Loan"):
+                new_name = st.text_input(
+                    "New Loan Name",
+                    value=current_loan,
+                    placeholder="e.g., Loan to Beth, Home Renovation, etc.",
+                    key="rename_input"
+                )
+                if st.button("Rename Loan", key="rename_button"):
+                    if new_name and new_name != current_loan and new_name.strip():
+                        # Rename the loan in the session state
+                        loan_data = st.session_state.loans[current_loan]
+                        del st.session_state.loans[current_loan]
+                        st.session_state.loans[new_name] = loan_data
+                        st.session_state.current_loan = new_name
+                        # TODO: Implement Supabase save
+                        st.rerun()
+                    elif not new_name.strip():
+                        st.error("Loan name cannot be empty")
+                    else:
+                        st.info("No changes made")
 
-with col1:
-    current_loan = st.selectbox(
-        "Select Loan",
-        options=list(st.session_state.loans.keys()),
-        key="loan_selector"
-    )
-    st.session_state.current_loan = current_loan
-    
-    # Loan renaming feature
-    with st.expander("Rename Loan"):
-        new_name = st.text_input(
-            "New Loan Name",
-            value=current_loan,
-            placeholder="e.g., Loan to Beth, Home Renovation, etc.",
-            key="rename_input"
-        )
-        if st.button("Rename Loan", key="rename_button"):
-            if new_name and new_name != current_loan and new_name.strip():
-                # Rename the loan in the session state
-                loan_data = st.session_state.loans[current_loan]
-                del st.session_state.loans[current_loan]
-                st.session_state.loans[new_name] = loan_data
-                st.session_state.current_loan = new_name
+        with col2:
+            if st.button("Add New Loan"):
+                loan_num = len(st.session_state.loans) + 1
+                new_loan_name = f"Loan {loan_num}"
+                st.session_state.loans[new_loan_name] = {
+                    "principal": 100000.0,
+                    "origination_date": date.today(),
+                    "annual_rate": 5.0,
+                    "term_years": 30,
+                    "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
+                    "lender": "Your Company",
+                    "borrower": "Borrower Name",
+                    "borrower_token": generate_secure_token()
+                }
+                st.session_state.current_loan = new_loan_name
                 # TODO: Implement Supabase save
                 st.rerun()
-            elif not new_name.strip():
-                st.error("Loan name cannot be empty")
-            else:
-                st.info("No changes made")
 
-with col2:
-    if st.button("Add New Loan"):
-        loan_num = len(st.session_state.loans) + 1
-        new_loan_name = f"Loan {loan_num}"
-        st.session_state.loans[new_loan_name] = {
-            "principal": 100000.0,
-            "origination_date": date.today(),
-            "annual_rate": 5.0,
-            "term_years": 30,
-            "payments_df": pd.DataFrame(columns=["Date", "Amount"]),
-            "lender": "Your Company",
-            "borrower": "Borrower Name",
-            "borrower_token": generate_secure_token()
-        }
-        st.session_state.current_loan = new_loan_name
-        save_data()
-        st.rerun()
+        with col3:
+            if len(st.session_state.loans) > 1:
+                if st.button("Delete Current Loan"):
+                    del st.session_state.loans[current_loan]
+                    st.session_state.current_loan = list(st.session_state.loans.keys())[0]
+                    # TODO: Implement Supabase save
+                    st.rerun()
 
-with col3:
-    if len(st.session_state.loans) > 1:
-        if st.button("Delete Current Loan"):
-            del st.session_state.loans[current_loan]
-            st.session_state.current_loan = list(st.session_state.loans.keys())[0]
-            # TODO: Implement Supabase save
-            st.rerun()
+        # Get current loan data
+        current_loan_data = st.session_state.loans[current_loan]
 
-# Get current loan data
-current_loan_data = st.session_state.loans[current_loan]
+        # Debug mode toggle (for administrators)
+        st.session_state.show_debug = st.checkbox("🔧 Display Debugging Information", value=st.session_state.get("show_debug", False), key="debug_toggle")
 
-# Debug mode toggle (for administrators)
-st.session_state.show_debug = st.checkbox("🔧 Display Debugging Information", value=st.session_state.get("show_debug", False), key="debug_toggle")
-
-if st.session_state.get("show_debug", False):
-    st.success("🔧 Debug mode: ON")
-    st.info("Debug information will be displayed below when processing payments.")
-else:
-    st.info("🔧 Debug mode: OFF - Check the box above to enable debugging information.")
-
-with st.sidebar:
-    # Lender and Borrower information - MOVED TO TOP
-    st.header("👥 Parties")
-    lender = st.text_input("Lender", value=current_loan_data.get("lender", "Your Company"))
-    borrower = st.text_input("Borrower", value=current_loan_data.get("borrower", "Borrower Name"))
-    
-    # Borrower access link generation
-    st.header("🔗 Borrower Access")
-    if st.button("Generate New Borrower Link"):
-        current_loan_data["borrower_token"] = generate_secure_token()
-        # TODO: Implement Supabase save
-        st.success("✅ New borrower access link generated!")
-    
-    # Display current borrower link
-    if "borrower_token" in current_loan_data:
-        # Create the relative path for the borrower link
-        borrower_path = create_borrower_link(current_loan_data['borrower'], current_loan_data['borrower_token'])
-        
-        st.info("🔗 **Borrower Access Link Generated**")
-        st.code(borrower_path, language="text")
-        st.caption("📋 **How to use:** Copy this path and add it to your Streamlit app URL")
-        
-        # Show full URL example
-        st.subheader("📧 **Full URL to Share:**")
-        example_url = f"http://localhost:8501{borrower_path}"
-        st.code(example_url, language="text")
-        st.caption("💡 **Note:** Replace 'localhost:8501' with your actual Streamlit app URL when sharing")
-    
-    # Loan Terms - MOVED BELOW PARTIES
-    st.header("💰 Loan Terms")
-    principal = st.number_input("Original Principal ($)", min_value=0.0, value=current_loan_data["principal"], step=1000.0, format="%.2f")
-    origination_date = st.date_input("Origination Date", value=current_loan_data["origination_date"])
-    annual_rate = st.number_input("Interest Rate (APR %)", min_value=0.0, value=current_loan_data["annual_rate"], step=0.1, format="%.3f") / 100.0
-    term_years = st.number_input("Loan Term (years)", min_value=1, value=current_loan_data["term_years"], step=1)
-    
-    # Update loan data when sidebar values change
-    current_loan_data.update({
-        "principal": principal,
-        "origination_date": origination_date,
-        "annual_rate": annual_rate * 100,  # Store as percentage
-        "term_years": term_years,
-        "lender": lender,
-        "borrower": borrower
-    })
-    # TODO: Implement Supabase save
-
-st.subheader("Payments")
-st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
-
-uploaded = st.file_uploader("Upload payments CSV (optional)", type=["csv"])
-
-if uploaded is not None:
-    try:
-        tmp = pd.read_csv(uploaded, dtype=str, keep_default_na=False)
-        # normalize columns
-        date_col = None
-        amt_col = None
-        for c in tmp.columns:
-            cl = str(c).strip().lower()
-            if "date" in cl and date_col is None:
-                date_col = c
-            if ("amount" in cl or "amt" in cl) and amt_col is None:
-                amt_col = c
-        if date_col is None or amt_col is None:
-            st.error("Could not find 'Date' and 'Amount' columns.")
+        if st.session_state.get("show_debug", False):
+            st.success("🔧 Debug mode: ON")
+            st.info("Debug information will be displayed below when processing payments.")
         else:
-            tmp = tmp[[date_col, amt_col]].rename(columns={date_col: "Date", amt_col: "Amount"})
-            # Use centralized cleaning function
-            clean_payments_df = clean_payments_df(tmp)
-            current_loan_data["payments_df"] = clean_payments_df
+            st.info("🔧 Debug mode: OFF - Check the box above to enable debugging information.")
+
+        with st.sidebar:
+            # Lender and Borrower information - MOVED TO TOP
+            st.header("👥 Parties")
+            lender = st.text_input("Lender", value=current_loan_data.get("lender", "Your Company"))
+            borrower = st.text_input("Borrower", value=current_loan_data.get("borrower", "Borrower Name"))
+            
+            # Borrower access link generation
+            st.header("🔗 Borrower Access")
+            if st.button("Generate New Borrower Link"):
+                current_loan_data["borrower_token"] = generate_secure_token()
+                # TODO: Implement Supabase save
+                st.success("✅ New borrower access link generated!")
+            
+            # Display current borrower link
+            if "borrower_token" in current_loan_data:
+                # Create the relative path for the borrower link
+                borrower_path = create_borrower_link(current_loan_data['borrower'], current_loan_data['borrower_token'])
+                
+                st.info("🔗 **Borrower Access Link Generated**")
+                st.code(borrower_path, language="text")
+                st.caption("📋 **How to use:** Copy this path and add it to your Streamlit app URL")
+                
+                # Show full URL example
+                st.subheader("📧 **Full URL to Share:**")
+                example_url = f"http://localhost:8501{borrower_path}"
+                st.code(example_url, language="text")
+                st.caption("💡 **Note:** Replace 'localhost:8501' with your actual Streamlit app URL when sharing")
+            
+            # Loan Terms - MOVED BELOW PARTIES
+            st.header("💰 Loan Terms")
+            principal = st.number_input("Original Principal ($)", min_value=0.0, value=current_loan_data["principal"], step=1000.0, format="%.2f")
+            origination_date = st.date_input("Origination Date", value=current_loan_data["origination_date"])
+            annual_rate = st.number_input("Interest Rate (APR %)", min_value=0.0, value=current_loan_data["annual_rate"], step=0.1, format="%.3f") / 100.0
+            term_years = st.number_input("Loan Term (years)", min_value=1, value=current_loan_data["term_years"], step=1)
+            
+            # Update loan data when sidebar values change
+            current_loan_data.update({
+                "principal": principal,
+                "origination_date": origination_date,
+                "annual_rate": annual_rate * 100,  # Store as percentage
+                "term_years": term_years,
+                "lender": lender,
+                "borrower": borrower
+            })
             # TODO: Implement Supabase save
-            st.success(f"✅ CSV uploaded and cleaned successfully!")
-    except Exception as e:
-        st.error(f"Failed to parse CSV: {e}")
 
-# Manual payment entry
-st.subheader("Add New Payment")
-col1, col2 = st.columns(2)
-with col1:
-    new_payment_date = st.date_input("Payment Date", value=date.today(), key="new_payment_date")
-with col2:
-    new_payment_amount = st.number_input("Payment Amount ($)", min_value=0.01, value=100.0, step=10.0, format="%.2f", key="new_payment_amount")
+        st.subheader("Payments")
+        st.caption("Enter payments below or upload a CSV with columns: Date, Amount. Positive amounts = payments.")
 
-if st.button("Enter New Payment", type="primary"):
-    # Input validation
-    if new_payment_amount <= 0:
-        st.error("❌ Payment amount must be greater than $0.00")
-    elif new_payment_date < current_loan_data["origination_date"]:
-        st.error(f"❌ Payment date cannot be before loan origination date ({current_loan_data['origination_date'].strftime('%m/%d/%Y')})")
-    else:
-        # Create new payment row
-        new_payment = pd.DataFrame({
-            "Date": [new_payment_date],
-            "Amount": [new_payment_amount]
-        })
-        
-        # Ensure we have a DataFrame for the current payments
+        uploaded = st.file_uploader("Upload payments CSV (optional)", type=["csv"])
+
+        if uploaded is not None:
+            try:
+                tmp = pd.read_csv(uploaded, dtype=str, keep_default_na=False)
+                # normalize columns
+                date_col = None
+                amt_col = None
+                for c in tmp.columns:
+                    cl = str(c).strip().lower()
+                    if "date" in cl and date_col is None:
+                        date_col = c
+                    if ("amount" in cl or "amt" in cl) and amt_col is None:
+                        amt_col = c
+                if date_col is None or amt_col is None:
+                    st.error("Could not find 'Date' and 'Amount' columns.")
+                else:
+                    tmp = tmp[[date_col, amt_col]].rename(columns={date_col: "Date", amt_col: "Amount"})
+                    # Use centralized cleaning function
+                    clean_payments_df = clean_payments_df(tmp)
+                    current_loan_data["payments_df"] = clean_payments_df
+                    # TODO: Implement Supabase save
+                    st.success(f"✅ CSV uploaded and cleaned successfully!")
+            except Exception as e:
+                st.error(f"Failed to parse CSV: {e}")
+
+        # Manual payment entry
+        st.subheader("Add New Payment")
+        col1, col2 = st.columns(2)
+        with col1:
+            new_payment_date = st.date_input("Payment Date", value=date.today(), key="new_payment_date")
+        with col2:
+            new_payment_amount = st.number_input("Payment Amount ($)", min_value=0.01, value=100.0, step=10.0, format="%.2f", key="new_payment_amount")
+
+        if st.button("Enter New Payment", type="primary"):
+            # Input validation
+            if new_payment_amount <= 0:
+                st.error("❌ Payment amount must be greater than $0.00")
+            elif new_payment_date < current_loan_data["origination_date"]:
+                st.error(f"❌ Payment date cannot be before loan origination date ({current_loan_data['origination_date'].strftime('%m/%d/%Y')})")
+            else:
+                # Create new payment row
+                new_payment = pd.DataFrame({
+                    "Date": [new_payment_date],
+                    "Amount": [new_payment_amount]
+                })
+                
+                # Ensure we have a DataFrame for the current payments
+                payments_df = current_loan_data["payments_df"]
+                if isinstance(payments_df, list):
+                    payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
+                
+                # Add new payment and sort by date
+                payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
+                payments_df = payments_df.sort_values("Date").reset_index(drop=True)
+                
+                # Clean the combined payments using centralized function
+                clean_payments_df = clean_payments_df(payments_df)
+                
+                # Update the loan data
+                current_loan_data["payments_df"] = clean_payments_df
+                # TODO: Implement Supabase save
+                
+                st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
+                
+                # Auto-recalculate the schedule
+                st.rerun()
+
+        st.subheader("Payment History")
+        st.caption("Edit payments below or use the CSV upload above to add multiple payments at once.")
+
+        # Display and edit payments for current loan
+        # Ensure we have a DataFrame for the data editor
         payments_df = current_loan_data["payments_df"]
         if isinstance(payments_df, list):
             payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
-        
-        # Add new payment and sort by date
-        payments_df = pd.concat([payments_df, new_payment], ignore_index=True)
-        payments_df = payments_df.sort_values("Date").reset_index(drop=True)
-        
-        # Clean the combined payments using centralized function
-        clean_payments_df = clean_payments_df(payments_df)
-        
-        # Update the loan data
-        current_loan_data["payments_df"] = clean_payments_df
-        # TODO: Implement Supabase save
-        
-        st.success(f"✅ Added payment of ${new_payment_amount:.2f} on {new_payment_date.strftime('%m/%d/%Y')}")
-        
-        # Auto-recalculate the schedule
-        st.rerun()
+            current_loan_data["payments_df"] = payments_df
 
-st.subheader("Payment History")
-st.caption("Edit payments below or use the CSV upload above to add multiple payments at once.")
+        edited_df = st.data_editor(
+            payments_df, 
+            num_rows="dynamic", 
+            width='stretch', 
+            height=320
+        )
 
-# Display and edit payments for current loan
-# Ensure we have a DataFrame for the data editor
-payments_df = current_loan_data["payments_df"]
-if isinstance(payments_df, list):
-    payments_df = pd.DataFrame(payments_df) if payments_df else pd.DataFrame(columns=["Date", "Amount"])
-    current_loan_data["payments_df"] = payments_df
+        # Check if payments were edited and save if changed
+        if not edited_df.equals(payments_df):
+            # Clean the edited payments using centralized function
+            clean_payments_df = clean_payments_df(edited_df)
+            current_loan_data["payments_df"] = clean_payments_df
+            # TODO: Implement Supabase save
+            st.success("✅ Payment changes saved and cleaned!")
 
-edited_df = st.data_editor(
-    payments_df, 
-    num_rows="dynamic", 
-    width='stretch', 
-    height=320
-)
+        # ============================================================================
+        # CRITICAL FUNCTION: Core Calculation Engine
+        # ============================================================================
+        # DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+        # This function contains the Actual/365 interest calculation logic
+        # and payment allocation algorithm - core business logic
+        # ============================================================================
 
-# Check if payments were edited and save if changed
-if not edited_df.equals(payments_df):
-    # Clean the edited payments using centralized function
-    clean_payments_df = clean_payments_df(edited_df)
-    current_loan_data["payments_df"] = clean_payments_df
-    # TODO: Implement Supabase save
-    st.success("✅ Payment changes saved and cleaned!")
-
-# ============================================================================
-# CRITICAL FUNCTION: Core Calculation Engine
-# ============================================================================
-# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
-# This function contains the Actual/365 interest calculation logic
-# and payment allocation algorithm - core business logic
-# ============================================================================
-
-def compute_schedule(principal, origination_date, annual_rate, payments_df):
-    # Debug: Check what we received
-    if st.session_state.get("show_debug", False):
-        st.write(f"Debug - payments_df type: {type(payments_df)}")
-        st.write(f"Debug - payments_df content: {payments_df}")
-        if hasattr(payments_df, 'shape'):
-            st.write(f"Debug - payments_df shape: {payments_df.shape}")
-    
-    # Use centralized cleaning function
-    cleaned_df = clean_payments_df(payments_df)
-
-    # ---- DEBUG (conditional display) ----
-    if st.session_state.get("show_debug", False):
-        st.text(f"Debug - Original payments count: {len(payments_df)}")
-        st.text(f"Debug - After cleaning count: {len(cleaned_df)}")
-        if not cleaned_df.empty:
-            st.write("Debug - After cleaning (head):", cleaned_df.head())
-
-    # --- Filter out payments before origination date ---
-    if st.session_state.get("show_debug", False):
-        st.text(f"Debug - Origination date: {origination_date} ({type(origination_date).__name__})")
-    filtered_df = cleaned_df[cleaned_df["Date"] >= origination_date]
-
-    if st.session_state.get("show_debug", False):
-        st.text(f"Debug - After filtering count: {len(filtered_df)}")
-        if not filtered_df.empty:
-            st.write("Debug - After filtering (head):", filtered_df.head())
-
-    # --- Core schedule calculation (Actual/365 simple interest) ---
-    df = filtered_df.sort_values("Date")
-    schedule = []
-    bal = round(float(principal), 2)
-    last_date = origination_date
-    accrued_carry = 0.0
-
-    for _, row in df.iterrows():
-        d = row["Date"]
-        amt = float(row["Amount"])
-        days = (d - last_date).days
-        interest_accrued = bal * annual_rate * (days / 365.0) if days > 0 else 0.0
-        interest_due = interest_accrued + accrued_carry
-
-        if amt >= interest_due:
-            interest_applied = round(interest_due, 2)
-            principal_applied = round(amt - interest_due, 2)
-            bal = round(bal - principal_applied, 2)
-            accrued_carry = 0.0
-        else:
-            interest_applied = round(amt, 2)
-            principal_applied = 0.0
-            accrued_carry = round(interest_due - amt, 2)
-
-        schedule.append({
-            "Payment Date": d,
-            "Days Since Last Payment": days,
-            "Payment Amount": round(amt, 2),
-            "Interest Accrued Since Last Payment": round(interest_accrued, 2),
-            "Interest Applied": interest_applied,
-            "Principal Applied": principal_applied,
-            "Principal Balance After Payment": bal
-        })
-        last_date = d
-
-    return pd.DataFrame(schedule)
-
-# ============================================================================
-# CRITICAL FUNCTION: PDF Report Generation
-# ============================================================================
-# DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
-# This function generates the complete PDF report with all calculations
-# ============================================================================
-
-def build_pdf(df, principal, origination_date, annual_rate, term_years):
-    buf = BytesIO()
-    pp = PdfPages(buf)
-
-    # Summary page
-    fig = plt.figure(figsize=(8.5, 11))
-    fig.clf()
-    r = annual_rate / 12.0
-    n = int(term_years * 12)
-    ref_payment = 0.0 if r <= 0 or n <= 0 else round(principal * r / (1 - (1+r)**(-n)), 2)
-
-    summary = f"""\
-Loan Payment Report
-
-Original Principal: ${principal:,.2f}
-Origination Date: {origination_date:%B %d, %Y}
-Interest Rate: {annual_rate*100:.3f}% APR (Actual/365 simple interest)
-Loan Term: {term_years} years
-
-Reference Monthly Payment (level-pay): ${ref_payment:,.2f}
-
-Generated: {date.today():%B %d, %Y}
-
-Results:
-• Last recorded payment: {df['Payment Date'].max():%b %d, %Y}
-• Principal remaining after last payment: ${df['Principal Balance After Payment'].iloc[-1]:,.2f}
-• Total interest paid to date: ${df['Interest Applied'].sum():,.2f}
-• Total principal repaid to date: ${df['Principal Applied'].sum():,.2f}
-
-Assumptions:
-• Payments before origination excluded
-• Interest accrues daily on principal only; unpaid interest does not compound
-• Payments applied to accrued interest first, then principal
-"""
-    import textwrap
-    wrapped = "\n".join([textwrap.fill(line, width=90) for line in summary.strip().splitlines()])
-    plt.axis('off')
-    plt.text(0.05, 0.95, wrapped, va='top', ha='left', fontsize=10, family='monospace')
-    pp.savefig(fig)
-    plt.close(fig)
-
-    # Per-payment table
-    cols = ["Payment Date","Payment Amount","Days Since Last Payment",
-            "Interest Accrued Since Last Payment","Interest Applied",
-            "Principal Applied","Principal Balance After Payment"]
-    dfp = df.copy()
-    dfp["Payment Date"] = pd.to_datetime(dfp["Payment Date"]).dt.strftime("%Y-%m-%d")
-    rows_per_page = 25
-    for start in range(0, len(dfp), rows_per_page):
-        chunk = dfp.iloc[start:start+rows_per_page][cols]
-        fig = plt.figure(figsize=(8.5, 11))
-        ax = fig.add_subplot(111)
-        ax.axis('off')
-        tbl = ax.table(cellText=chunk.values, colLabels=chunk.columns, loc='center')
-        tbl.auto_set_font_size(False)
-        tbl.set_fontsize(8)
-        tbl.scale(1, 1.2)
-        ax.set_title("Per-Payment Allocation", fontsize=12, pad=20)
-        pp.savefig(fig, bbox_inches='tight')
-        plt.close(fig)
-
-    # Monthly balances table - only show months with actual interest accrual
-    df_sorted = df.sort_values("Payment Date")
-    if not df_sorted.empty:
-        last_payment_date = df_sorted["Payment Date"].max()
-        # Only show months up to the last payment date, plus current month if there's interest accrual
-        end_month = last_payment_date.replace(day=1)  # Start of month of last payment
-        
-        # Check if we need to add current month (only if there's been time since last payment)
-        today = date.today()
-        days_since_last_payment = (today - last_payment_date).days
-        if days_since_last_payment > 0:
-            # Add current month if there's been time for interest to accrue
-            current_month_start = date(today.year, today.month, 1)
-            if current_month_start > end_month.replace(day=1):
-                end_month = current_month_start
-        
-        start_month = date(origination_date.year, origination_date.month, 1)
-        
-        # Build monthly principal balances using the schedule
-        bal = float(principal)
-        accrued_carry = 0.0
-        last_event_date = origination_date
-        payments_sorted = df_sorted[["Payment Date","Payment Amount"]].to_records(index=False)
-
-        monthly_rows = []
-        pay_idx = 0
-        cur = start_month
-        
-        while cur <= end_month:
-            nm = date(cur.year + (cur.month // 12), (cur.month % 12) + 1, 1)
-            eom = nm - timedelta(days=1)
+        def compute_schedule(principal, origination_date, annual_rate, payments_df):
+            # Debug: Check what we received
+            if st.session_state.get("show_debug", False):
+                st.write(f"Debug - payments_df type: {type(payments_df)}")
+                st.write(f"Debug - payments_df content: {payments_df}")
+                if hasattr(payments_df, 'shape'):
+                    st.write(f"Debug - payments_df shape: {payments_df.shape}")
             
-            # Process all payments in this month
-            month_has_activity = False
-            while pay_idx < len(payments_sorted) and payments_sorted[pay_idx][0] <= eom:
-                d = payments_sorted[pay_idx][0]
-                amt = float(payments_sorted[pay_idx][1])
-                days = (d - last_event_date).days
+            # Use centralized cleaning function
+            cleaned_df = clean_payments_df(payments_df)
+
+            # ---- DEBUG (conditional display) ----
+            if st.session_state.get("show_debug", False):
+                st.text(f"Debug - Original payments count: {len(payments_df)}")
+                st.text(f"Debug - After cleaning count: {len(cleaned_df)}")
+                if not cleaned_df.empty:
+                    st.write("Debug - After cleaning (head):", cleaned_df.head())
+
+            # --- Filter out payments before origination date ---
+            if st.session_state.get("show_debug", False):
+                st.text(f"Debug - Origination date: {origination_date} ({type(origination_date).__name__})")
+            filtered_df = cleaned_df[cleaned_df["Date"] >= origination_date]
+
+            if st.session_state.get("show_debug", False):
+                st.text(f"Debug - After filtering count: {len(filtered_df)}")
+                if not filtered_df.empty:
+                    st.write("Debug - After filtering (head):", filtered_df.head())
+
+            # --- Core schedule calculation (Actual/365 simple interest) ---
+            df = filtered_df.sort_values("Date")
+            schedule = []
+            bal = round(float(principal), 2)
+            last_date = origination_date
+            accrued_carry = 0.0
+
+            for _, row in df.iterrows():
+                d = row["Date"]
+                amt = float(row["Amount"])
+                days = (d - last_date).days
                 interest_accrued = bal * annual_rate * (days / 365.0) if days > 0 else 0.0
                 interest_due = interest_accrued + accrued_carry
+
                 if amt >= interest_due:
+                    interest_applied = round(interest_due, 2)
                     principal_applied = round(amt - interest_due, 2)
                     bal = round(bal - principal_applied, 2)
                     accrued_carry = 0.0
                 else:
+                    interest_applied = round(amt, 2)
+                    principal_applied = 0.0
                     accrued_carry = round(interest_due - amt, 2)
-                last_event_date = d
-                pay_idx += 1
-                month_has_activity = True
+
+                schedule.append({
+                    "Payment Date": d,
+                    "Days Since Last Payment": days,
+                    "Payment Amount": round(amt, 2),
+                    "Interest Accrued Since Last Payment": round(interest_accrued, 2),
+                    "Interest Applied": interest_applied,
+                    "Principal Applied": principal_applied,
+                    "Principal Balance After Payment": bal
+                })
+                last_date = d
+
+            return pd.DataFrame(schedule)
+
+        # ============================================================================
+        # CRITICAL FUNCTION: PDF Report Generation
+        # ============================================================================
+        # DO NOT MODIFY THIS FUNCTION WITHOUT UPDATING FEATURE_CHECKLIST.md
+        # This function generates the complete PDF report with all calculations
+        # ============================================================================
+
+        def build_pdf(df, principal, origination_date, annual_rate, term_years):
+            buf = BytesIO()
+            pp = PdfPages(buf)
+
+            # Summary page
+            fig = plt.figure(figsize=(8.5, 11))
+            fig.clf()
+            r = annual_rate / 12.0
+            n = int(term_years * 12)
+            ref_payment = 0.0 if r <= 0 or n <= 0 else round(principal * r / (1 - (1+r)**(-n)), 2)
+
+            summary = f"""\
+Loan Payment Report
+Generated: {date.today().strftime('%B %d, %Y')}
+
+Principal: ${principal:,.2f}
+Interest Rate: {annual_rate*100:.3f}% APR
+Term: {term_years} years
+Reference Payment (30/360): ${ref_payment:,.2f}
+
+Total Payments: {len(df)}
+Total Interest Applied: ${df['Interest Applied'].sum():,.2f}
+Total Principal Applied: ${df['Principal Applied'].sum():,.2f}
+Final Balance: ${df['Principal Balance After Payment'].iloc[-1]:,.2f}
+"""
+
+            plt.text(0.1, 0.9, summary, transform=fig.transFigure, fontsize=10, verticalalignment='top', fontfamily='monospace')
+            plt.title("Loan Payment Summary", fontsize=16, fontweight='bold')
+            pp.savefig(fig)
+            plt.close()
+
+            # Payment schedule page
+            if not df.empty:
+                fig, ax = plt.subplots(figsize=(8.5, 11))
+                ax.axis('tight')
+                ax.axis('off')
+                
+                # Prepare data for table
+                table_data = []
+                for _, row in df.iterrows():
+                    table_data.append([
+                        row['Payment Date'].strftime('%m/%d/%Y'),
+                        f"${row['Payment Amount']:,.2f}",
+                        f"${row['Interest Applied']:,.2f}",
+                        f"${row['Principal Applied']:,.2f}",
+                        f"${row['Principal Balance After Payment']:,.2f}"
+                    ])
+                
+                table = ax.table(cellText=table_data,
+                               colLabels=['Date', 'Payment', 'Interest', 'Principal', 'Balance'],
+                               cellLoc='center',
+                               loc='center',
+                               colWidths=[0.2, 0.2, 0.2, 0.2, 0.2])
+                
+                table.auto_set_font_size(False)
+                table.set_fontsize(9)
+                table.scale(1, 2)
+                
+                plt.title("Payment Schedule", fontsize=16, fontweight='bold', pad=20)
+                pp.savefig(fig)
+                plt.close()
+
+            pp.close()
+            buf.seek(0)
+            return buf.getvalue()
+
+        # Calculate and display payment schedule
+        if st.button("Calculate & Show Tables", type="primary"):
+            df = compute_schedule(
+                current_loan_data["principal"], 
+                current_loan_data["origination_date"], 
+                current_loan_data["annual_rate"] / 100,  # Convert back to decimal
+                current_loan_data["payments_df"]
+            )
             
-            # Only add month if there was activity (payments) or if it's the current month with interest accrual
-            if month_has_activity or (cur == end_month and days_since_last_payment > 0):
-                monthly_rows.append({"Month End": eom, "Principal Balance": bal})
-            
-            cur = nm
-    else:
-        # No payments - create empty monthly table
-        monthly_rows = []
-
-    dfm = pd.DataFrame(monthly_rows)
-    dfm["Month End"] = pd.to_datetime(dfm["Month End"]).dt.strftime("%Y-%m-%d")
-
-    rows_per_page = 40
-    for start in range(0, len(dfm), rows_per_page):
-        chunk = dfm.iloc[start:start+rows_per_page]
-        fig = plt.figure(figsize=(8.5, 11))
-        ax = fig.add_subplot(111)
-        ax.axis('off')
-        tbl = ax.table(cellText=chunk.values, colLabels=chunk.columns, loc='center')
-        tbl.auto_set_font_size(False)
-        tbl.set_fontsize(8)
-        tbl.scale(1, 1.2)
-        ax.set_title("Monthly Principal Balance (End of Month)", fontsize=12, pad=20)
-        pp.savefig(fig, bbox_inches='tight')
-        plt.close(fig)
-
-    pp.close()
-    buf.seek(0)
-    return buf.getvalue()
-
-if st.button("Calculate & Show Tables"):
-    df = compute_schedule(
-        current_loan_data["principal"], 
-        current_loan_data["origination_date"], 
-        current_loan_data["annual_rate"] / 100,  # Convert back to decimal
-        current_loan_data["payments_df"]
-    )
-    if df.empty:
-        st.warning("No payments on/after origination date.")
-    else:
-        st.success("Calculated.")
-        # Configure column display with specific pixel widths for optimal layout
-        st.dataframe(
-            df,
-            width='stretch',
-            column_config={
-                "Payment Date": st.column_config.DateColumn(
-                    "Payment Date",
-                    format="MM/DD/YYYY",
-                    width=80,
-                    help="Date when payment was made"
-                ),
-                "Days Since Last Payment": st.column_config.NumberColumn(
-                    "Days Since Last Payment",
-                    width=60,
-                    help="Number of days since the previous payment"
-                ),
-                "Payment Amount": st.column_config.NumberColumn(
-                    "Payment Amount",
-                    format="$%.2f",
-                    width=100,
-                    help="Total payment amount received"
-                ),
-                "Interest Accrued Since Last Payment": st.column_config.NumberColumn(
-                    "Interest Accrued Since Last Payment",
-                    format="$%.2f",
-                    width=120,
-                    help="Interest that accrued between this payment and the previous one"
-                ),
-                "Interest Applied": st.column_config.NumberColumn(
-                    "Interest Applied",
-                    format="$%.2f",
-                    width=100,
-                    help="Portion of payment applied to interest"
-                ),
-                "Principal Applied": st.column_config.NumberColumn(
-                    "Principal Applied",
-                    format="$%.2f",
-                    width=100,
-                    help="Portion of payment applied to principal reduction"
-                ),
-                "Principal Balance After Payment": st.column_config.NumberColumn(
-                    "Principal Balance After Payment",
-                    format="$%.2f",
-                    width=120,
-                    help="Remaining principal balance after this payment"
+            if not df.empty:
+                st.subheader("Payment Schedule")
+                
+                # Display the schedule with proper column configuration
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    column_config={
+                        "Payment Date": st.column_config.DateColumn(
+                            "Payment Date",
+                            format="MM/DD/YYYY",
+                            width=100,
+                            help="Date when payment was made"
+                        ),
+                        "Days Since Last Payment": st.column_config.NumberColumn(
+                            "Days Since Last Payment",
+                            format="%d",
+                            width=120,
+                            help="Number of days since the previous payment"
+                        ),
+                        "Payment Amount": st.column_config.NumberColumn(
+                            "Payment Amount",
+                            format="$%.2f",
+                            width=120,
+                            help="Total payment amount received"
+                        ),
+                        "Interest Accrued Since Last Payment": st.column_config.NumberColumn(
+                            "Interest Accrued Since Last Payment",
+                            format="$%.2f",
+                            width=120,
+                            help="Interest that accrued between this payment and the previous one"
+                        ),
+                        "Interest Applied": st.column_config.NumberColumn(
+                            "Interest Applied",
+                            format="$%.2f",
+                            width=100,
+                            help="Portion of payment applied to interest"
+                        ),
+                        "Principal Applied": st.column_config.NumberColumn(
+                            "Principal Applied",
+                            format="$%.2f",
+                            width=100,
+                            help="Portion of payment applied to principal reduction"
+                        ),
+                        "Principal Balance After Payment": st.column_config.NumberColumn(
+                            "Principal Balance After Payment",
+                            format="$%.2f",
+                            width=120,
+                            help="Remaining principal balance after this payment"
+                        )
+                    },
+                    hide_index=True
                 )
-            },
-            hide_index=True
-        )
-        
-        # Show current interest accrual since last payment
-        if not df.empty:
-            last_payment_date = df["Payment Date"].max()
-            last_principal_balance = df["Principal Balance After Payment"].iloc[-1]
-            today = date.today()
-            days_since_last_payment = (today - last_payment_date).days
+                
+                # Show current interest accrual since last payment
+                if not df.empty:
+                    last_payment_date = df["Payment Date"].max()
+                    last_principal_balance = df["Principal Balance After Payment"].iloc[-1]
+                    today = date.today()
+                    days_since_last_payment = (today - last_payment_date).days
+                    
+                    if days_since_last_payment > 0:
+                        current_interest_rate = current_loan_data["annual_rate"] / 100
+                        interest_accrued_since_last = last_principal_balance * current_interest_rate * (days_since_last_payment / 365.0)
+                        
+                        st.subheader("Current Status")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Days Since Last Payment", days_since_last_payment)
+                        with col2:
+                            st.metric("Current Principal Balance", f"${last_principal_balance:,.2f}")
+                        with col3:
+                            st.metric("Interest Accrued Since Last Payment", f"${interest_accrued_since_last:,.2f}")
+                        
+                        st.info(f"**Note**: Interest continues to accrue daily at {current_interest_rate*100:.3f}% APR on the current principal balance of ${last_principal_balance:,.2f}")
+
+        if st.button("Generate PDF Report"):
+            df = compute_schedule(
+                current_loan_data["principal"], 
+                current_loan_data["origination_date"], 
+                current_loan_data["annual_rate"] / 100,  # Convert back to decimal
+                current_loan_data["payments_df"]
+            )
+            if df.empty:
+                st.warning("No payments on/after origination date.")
+            else:
+                pdf_bytes = build_pdf(
+                    df, 
+                    current_loan_data["principal"], 
+                    current_loan_data["origination_date"], 
+                    current_loan_data["annual_rate"] / 100,  # Convert back to decimal
+                    current_loan_data["term_years"]
+                )
+                fname = f"loan_report_{current_loan}_{date.today().isoformat()}.pdf"
+                st.download_button("Download PDF", data=pdf_bytes, file_name=fname, mime="application/pdf")
+
+        # Data Persistence Section
+        with st.expander("💾 Data Persistence", expanded=False):
+            st.info("""
+            **Supabase Integration**: Your loan data will be automatically saved to Supabase whenever you:
+            - Upload a CSV file
+            - Modify loan terms in the sidebar
+            - Add, rename, or delete loans
+            - Edit payments in the table below
             
-            if days_since_last_payment > 0:
-                current_interest_rate = current_loan_data["annual_rate"] / 100
-                interest_accrued_since_last = last_principal_balance * current_interest_rate * (days_since_last_payment / 365.0)
-                
-                st.subheader("Current Status")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Days Since Last Payment", days_since_last_payment)
-                with col2:
-                    st.metric("Current Principal Balance", f"${last_principal_balance:,.2f}")
-                with col3:
-                    st.metric("Interest Accrued Since Last Payment", f"${interest_accrued_since_last:,.2f}")
-                
-                st.info(f"**Note**: Interest continues to accrue daily at {current_interest_rate*100:.3f}% APR on the current principal balance of ${last_principal_balance:,.2f}")
+            *Note: Supabase integration is currently being implemented.*
+            """)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("💾 Manual Save", help="Force save all current data"):
+                    # TODO: Implement Supabase save
+                    st.success("✅ Data saved successfully!")
+            
+            with col2:
+                if st.button("🔄 Reload Data", help="Reload data from saved file"):
+                    # TODO: Implement Supabase load
+                    st.warning("Supabase integration not yet implemented.")
 
-if st.button("Generate PDF Report"):
-    df = compute_schedule(
-        current_loan_data["principal"], 
-        current_loan_data["origination_date"], 
-        current_loan_data["annual_rate"] / 100,  # Convert back to decimal
-        current_loan_data["payments_df"]
-    )
-    if df.empty:
-        st.warning("No payments on/after origination date.")
-    else:
-        pdf_bytes = build_pdf(
-            df, 
-            current_loan_data["principal"], 
-            current_loan_data["origination_date"], 
-            current_loan_data["annual_rate"] / 100,  # Convert back to decimal
-            current_loan_data["term_years"]
-        )
-        fname = f"loan_report_{current_loan}_{date.today().isoformat()}.pdf"
-        st.download_button("Download PDF", data=pdf_bytes, file_name=fname, mime="application/pdf")
-
-# Data Persistence Section
-with st.expander("💾 Data Persistence", expanded=False):
-    st.info("""
-    **Supabase Integration**: Your loan data will be automatically saved to Supabase whenever you:
-    - Upload a CSV file
-    - Modify loan terms in the sidebar
-    - Add, rename, or delete loans
-    - Edit payments in the table below
-    
-    *Note: Supabase integration is currently being implemented.*
-    """)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("💾 Manual Save", help="Force save all current data"):
-            # TODO: Implement Supabase save
-            st.success("✅ Data saved successfully!")
-    
-    with col2:
-        if st.button("🔄 Reload Data", help="Reload data from saved file"):
-            # TODO: Implement Supabase load
-            st.warning("Supabase integration not yet implemented.")
-
-st.info("Run locally: 1) pip install streamlit matplotlib pandas  2) streamlit run loan_app.py")
+        st.info("Run locally: 1) pip install streamlit matplotlib pandas  2) streamlit run loan_app.py")
 
 # ============================================================================
 # CRITICAL SECTION: Feature Validation
