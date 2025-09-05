@@ -84,11 +84,12 @@ Desktop.ini
 # ===============================
 # Streamlit
 # ===============================
-.streamlit/
-# (keep your real secrets untracked; commit a template if needed)
-# .streamlit/secrets.toml
-# .streamlit/config.toml
 
+# Ignore real secrets, but allow the example file to be tracked
+.streamlit/secrets.toml
+
+# Optional: ignore local config if you don’t want to commit it
+.streamlit/config.toml
 # ===============================
 # Project-specific
 # ===============================
