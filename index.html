@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shylock Online — Private Loan Tracking That Actually Works</title>
+  <meta name="description" content="Track private loans to family and friends the right way. Each payment split correctly—interest first, then principal. Free for one loan." />
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#9ca3af; --brand:#10b981; --brand-2:#22d3ee; --accent:#f59e0b; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:linear-gradient(180deg,#0b1220 0%, #0b1220 60%, #0d1530 100%); color:var(--ink); font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial}
+    a{color:var(--brand-2);text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    header{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center;padding:18px 0 10px}
+    header img{width:100%;height:auto;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+    .badge{display:inline-block;background:rgba(16,185,129,.12);border:1px solid rgba(34,211,238,.25);color:#c7f9ff;padding:6px 10px;border-radius:999px;font-size:12px;margin-bottom:10px}
+    h1{font-size:40px;line-height:1.1;margin:6px 0 12px}
+    h2{font-size:28px;margin:28px 0 12px}
+    p{margin:8px 0;color:#dbe3f0}
+    .muted{color:var(--muted)}
+    .cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+    .btn{cursor:pointer;border:0;border-radius:12px;padding:12px 16px;font-weight:700}
+    .btn-primary{background:linear-gradient(90deg,var(--brand) 0%, var(--brand-2) 100%);color:#00110e}
+    .btn-ghost{background:transparent;border:1px solid #2b3446;color:#dce7f7}
+    .panel{background:linear-gradient(180deg,#0f172a 0%, #0c1426 100%); border:1px solid #1e293b; border-radius:16px; padding:18px}
+    .cols{display:grid;gap:18px;grid-template-columns:repeat(3,1fr)}
+    .cols-2{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
+    ul{margin:8px 0 0 18px}
+    .chipbar{display:flex;gap:10px;flex-wrap:wrap}
+    .chip{border:1px solid #2b3446;border-radius:999px;padding:8px 12px;cursor:pointer}
+    .chip.active{border-color:var(--brand); background:rgba(16,185,129,.1)}
+    .price{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
+    .price .title{font-weight:800;font-size:18px}
+    footer{margin:30px 0 10px;color:var(--muted);font-size:14px}
+    input,select,button{font:inherit}
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .field input{background:#0b1428;border:1px solid #243045;color:#e6eefc;border-radius:10px;padding:10px}
+    .calc-out{background:#0b1428;border:1px dashed #334155;border-radius:12px;padding:14px;margin-top:10px}
+    .tiny{font-size:12px;color:var(--muted)}
+    .faq details{background:#0b1428;border:1px solid #243045;border-radius:12px;padding:12px;margin:8px 0}
+    .center{text-align:center}
+    .mark{color:#fff;background:linear-gradient(90deg,rgba(16,185,129,.25),rgba(34,211,238,.2));padding:2px 6px;border-radius:6px}
+    @media (max-width:900px){ header{grid-template-columns:1fr;}}
+    @media (max-width:760px){ .cols{grid-template-columns:1fr} .cols-2{grid-template-columns:1fr} .price{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- HERO -->
+    <header>
+      <div>
+        <span class="badge">Built for family & friends loans — not big banks</span>
+        <h1>Tracking a private loan shouldn’t be this hard.</h1>
+        <p>
+          <strong>Founder’s note:</strong> “Even as a retired trial lawyer with four decades of experience, I ran into a nightmare after I loaned my sister money to buy a house.
+          I couldn’t find a single tool that would split each payment correctly — <span class="mark">interest first, then principal</span>. Not even Quicken could do it. So I built Shylock Online.”
+        </p>
+        <p><strong>Shylock</strong> makes private loan tracking simple: enter payments, and we handle the math — every time.</p>
+        <div class="cta-row">
+          <button class="btn btn-primary" id="ctaDemo">Try the 30-sec demo</button>
+          <button class="btn btn-ghost" id="ctaJoin">Get Early Access</button>
+        </div>
+        <p class="tiny muted">Free during beta. No credit card required.</p>
+      </div>
+      <div>
+        <img src="founder.jpg" alt="Breck Seiniger smiling with guitar and dog — friendly, non-institutional feel" />
+      </div>
+    </header>
+
+    <!-- PROBLEM / SOLUTION -->
+    <section class="cols">
+      <div class="panel">
+        <h2>Why typical tools don’t work</h2>
+        <ul>
+          <li>Payments arrive on irregular dates and amounts</li>
+          <li>Spreadsheets drift out of sync</li>
+          <li>Popular software can’t do this if <em>you</em> are the lender</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h2>What Shylock does</h2>
+        <ul>
+          <li>Splits every payment correctly — interest first, then principal</li>
+          <li>Keeps a running balance you can trust</li>
+          <li>Generates simple statements you can share</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h2>For people, not institutions</h2>
+        <p>Built for <strong>millions</strong> who lend to <strong>family & friends</strong>. Plain language, no bookkeeping jargon.</p>
+      </div>
+    </section>
+
+    <!-- DEMO CALCULATOR -->
+    <section class="panel" id="demo">
+      <h2>See a payment split in seconds</h2>
+      <div class="cols-2">
+        <div>
+          <div class="field">
+            <label>Current balance</label>
+            <input type="number" id="bal" value="10000" min="0" step="0.01">
+          </div>
+          <div class="field">
+            <label>Annual interest rate (%)</label>
+            <input type="number" id="rate" value="5" min="0" step="0.01">
+          </div>
+          <div class="field">
+            <label>Last balance date</label>
+            <input type="date" id="lastDate">
+          </div>
+          <div class="field">
+            <label>Payment date</label>
+            <input type="date" id="payDate">
+          </div>
+          <div class="field">
+            <label>Payment amount</label>
+            <input type="number" id="payAmt" value="500" min="0" step="0.01">
+          </div>
+          <div class="cta-row">
+            <button class="btn btn-primary" id="calcBtn">Calculate Split</button>
+            <button class="btn btn-ghost" id="seeMore">See full schedule + PDF (Early Access)</button>
+          </div>
+          <p class="tiny muted">Uses a 365-day count. This is an educational preview, not financial advice.</p>
+        </div>
+        <div>
+          <div class="calc-out" id="result">
+            <strong>Result will appear here.</strong>
+            <p class="muted tiny">Enter your numbers and click “Calculate Split.”</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEGMENTS -->
+    <section class="panel">
+      <h2>Who is this for?</h2>
+      <div class="chipbar" id="segments">
+        <div class="chip active" data-seg="lender">I lent money</div>
+        <div class="chip" data-seg="borrower">I borrowed money</div>
+        <div class="chip" data-seg="manager">I manage loans for others</div>
+      </div>
+      <div id="segCopy" style="margin-top:12px">
+        <p><strong>Lenders:</strong> Track repayments without spreadsheets. Get clean balances and simple statements you can send anytime.</p>
+      </div>
+    </section>
+
+    <!-- FREE vs PRO -->
+    <section class="price">
+      <div class="panel">
+        <div class="title">Free</div>
+        <p>Perfect to get started.</p>
+        <ul>
+          <li>Track <strong>1 loan</strong></li>
+          <li>Automatic payment splits</li>
+          <li>Running balance you can trust</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="title">Pro <span class="muted">(from $12/mo)</span></div>
+        <p>For active lenders & families.</p>
+        <ul>
+          <li>Track <strong>multiple loans</strong></li>
+          <li>Generate promissory notes</li>
+          <li>Borrowers can pay right in the app</li>
+          <li>Auto email/text confirmations</li>
+          <li>Share summaries with registered borrowers</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- WAITLIST -->
+    <section class="panel" id="waitlist">
+      <h2>Be one of the first to try Shylock Online</h2>
+      <form id="leadForm" method="POST" action="FORM_ACTION">
+        <!-- Replace FORM_ACTION with your Formspree/Tally endpoint; otherwise we'll just log to console -->
+        <div class="cols-2">
+          <div class="field">
+            <label>Your name</label>
+            <input name="name" required placeholder="Jane Smith">
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input name="email" type="email" required placeholder="you@example.com">
+          </div>
+        </div>
+        <div class="field">
+          <label>Which best describes you?</label>
+          <select name="role">
+            <option value="lender">I lent money</option>
+            <option value="borrower">I borrowed money</option>
+            <option value="manager">I manage loans for others</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>What’s the #1 must-have for Day 1?</label>
+          <input name="musthave" placeholder="e.g., easy statements / multiple loans / borrower portal">
+        </div>
+        <button class="btn btn-primary" type="submit">Join Early Access</button>
+        <p class="tiny muted">We’ll email when the beta is ready. No spam, ever.</p>
+      </form>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq">
+      <h2>Quick answers</h2>
+      <details><summary>Is this financial advice?</summary><div>No. Shylock is a tool that helps you track payments and balances. Always consult a professional for advice.</div></details>
+      <details><summary>Will this work for family and friends loans?</summary><div>Yes. That’s exactly what it’s for — simple, fair tracking for real-life loans.</div></details>
+      <details><summary>Why not just use Quicken?</summary><div>Quicken can handle loans when <em>you’re the borrower</em>, but not when <em>you’re the lender</em> and need interest-first splits. Shylock fills that gap.</div></details>
+    </section>
+
+    <footer class="center">
+      <p>© <span id="yr"></span> Shylock Online · <a href="#" aria-disabled="true">Privacy</a> · <a href="#" aria-disabled="true">Terms</a></p>
+      <p class="tiny">“Private loan tracking, done right.”</p>
+    </footer>
+  </div>
+
+  <script>
+    // --- tiny helper analytics before you wire Plausible/PostHog ---
+    window.analyticsLog = [];
+    function logEvt(name, data){ window.analyticsLog.push({t:Date.now(),name, ...data}); console.log("[evt]", name, data||""); }
+
+    // CTA wiring
+    document.getElementById('ctaDemo').addEventListener('click', () => {
+      document.getElementById('demo').scrollIntoView({behavior:'smooth'}); logEvt('cta_demo',{});
+    });
+    document.getElementById('ctaJoin').addEventListener('click', () => {
+      document.getElementById('waitlist').scrollIntoView({behavior:'smooth'}); logEvt('cta_waitlist',{});
+    });
+
+    // Segment chips
+    const segCopy = {
+      lender: "<p><strong>Lenders:</strong> Track repayments without spreadsheets. Get clean balances and simple statements you can send anytime.</p>",
+      borrower: "<p><strong>Borrowers:</strong> See exactly what you owe and why. No confusing tables.</p>",
+      manager: "<p><strong>Managers:</strong> Keep multiple loans organized. Export summaries in one click.</p>"
+    };
+    document.querySelectorAll('#segments .chip').forEach(ch => ch.addEventListener('click', e=>{
+      document.querySelectorAll('#segments .chip').forEach(x=>x.classList.remove('active'));
+      ch.classList.add('active');
+      const key = ch.dataset.seg; document.getElementById('segCopy').innerHTML = segCopy[key]; logEvt('segment_select',{segment:key});
+    }));
+
+    // Calculator defaults
+    const lastDate = document.getElementById('lastDate');
+    const payDate  = document.getElementById('payDate');
+    const todayISO = new Date().toISOString().slice(0,10);
+    lastDate.value = todayISO;
+    payDate.value  = todayISO;
+
+    function daysBetween(aISO,bISO){
+      const a = new Date(aISO+"T00:00:00"); const b = new Date(bISO+"T00:00:00");
+      return Math.max(0, Math.round((b - a) / (1000*60*60*24)));
+    }
+
+    document.getElementById('calcBtn').addEventListener('click', ()=>{
+      const bal   = Math.max(0, parseFloat(document.getElementById('bal').value||0));
+      const rate  = Math.max(0, parseFloat(document.getElementById('rate').value||0))/100;
+      const d1    = lastDate.value;
+      const d2    = payDate.value;
+      const days  = daysBetween(d1,d2);
+      const pay   = Math.max(0, parseFloat(document.getElementById('payAmt').value||0));
+
+      const accrued = +(bal * rate * (days/365)).toFixed(2);
+      const interestPaid = Math.min(pay, accrued);
+      const principalPaid = +(Math.max(0, pay - interestPaid)).toFixed(2);
+      const newBal = +(Math.max(0, bal - principalPaid)).toFixed(2);
+
+      const out = `
+        <div><strong>Payment split for ${d2}</strong></div>
+        <ul>
+          <li>Days since last balance: <strong>${days}</strong></li>
+          <li>Accrued interest: <strong>$${accrued.toLocaleString()}</strong></li>
+          <li>From your payment ($${pay.toLocaleString()}):</li>
+          <ul>
+            <li><strong>$${interestPaid.toLocaleString()}</strong> to interest</li>
+            <li><strong>$${principalPaid.toLocaleString()}</strong> to principal</li>
+          </ul>
+          <li>New balance: <strong>$${newBal.toLocaleString()}</strong></li>
+        </ul>
+        <p class="tiny muted">Want the full schedule and a PDF statement? Join Early Access below.</p>
+      `;
+      document.getElementById('result').innerHTML = out;
+      logEvt('calc_run',{days, pay, rate});
+    });
+
+    document.getElementById('seeMore').addEventListener('click', ()=>{
+      document.getElementById('waitlist').scrollIntoView({behavior:'smooth'}); logEvt('cta_fullschedule',{});
+    });
+
+    // Waitlist form (logs if no external endpoint)
+    document.getElementById('leadForm').addEventListener('submit', (e)=>{
+      const form = e.target;
+      if (form.getAttribute('action') === 'FORM_ACTION'){
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        logEvt('lead_submit', data);
+        alert("Thanks! You’re on the list. (This form is currently in demo mode—wire your endpoint to collect emails.)");
+      } else {
+        logEvt('lead_submit_forwarded',{});
+      }
+    });
+
+    // Year
+    document.getElementById('yr').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
