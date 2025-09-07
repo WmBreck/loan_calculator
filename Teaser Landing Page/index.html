@@ -6,48 +6,66 @@
   <title>Shylock Online — Private Loan Tracking That Actually Works</title>
   <meta name="description" content="Track private loans to family and friends the right way. Each payment split correctly—interest first, then principal. Free for one loan." />
   <style>
+    /* Light, trust-first palette */
     :root{
-      --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#9ca3af; --brand:#10b981; --brand-2:#22d3ee;
+      --bg1:#f8fafc;      /* near-white */
+      --bg2:#eef2f7;      /* soft gray-blue */
+      --panel:#ffffff;    /* cards */
+      --ink:#0f172a;      /* slate-900 text */
+      --muted:#556581;    /* slate-500/600 */
+      --border:#e5e7eb;   /* light borders */
+      --brand:#16a34a;    /* emerald */
+      --brand-2:#0ea5e9;  /* sky */
+      --accent:#d4a017;   /* warm gold to echo scales */
     }
     *{box-sizing:border-box}
-    html,body{margin:0;background:linear-gradient(180deg,#0b1220 0%, #0b1220 60%, #0d1530 100%); color:var(--ink); font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial}
-    a{color:var(--brand-2);text-decoration:none}
+    html,body{margin:0;background:linear-gradient(180deg,var(--bg1) 0%, var(--bg2) 100%); color:var(--ink); font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial}
+    a{color:#075985;text-decoration:none}
     .wrap{max-width:1100px;margin:0 auto;padding:24px}
-    header{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center;padding:18px 0 10px;position:relative}
+    /* Tiny top brand row */
+    .brandbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .brandbar img{height:36px;width:auto}
+    .brandbar .btn-mini{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;font-weight:600;color:#0f172a;cursor:pointer}
+    header{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;padding:10px 0 6px}
     header .photo-wrap{position:relative}
-    header img.hero{width:100%;height:auto;border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+    header img.hero{width:100%;height:auto;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.10)}
     /* Lawyer inset badge */
-    .cred{position:absolute;right:-10px;bottom:-10px;display:flex;align-items:center;gap:10px;background:rgba(15,23,42,.9);border:1px solid #1e293b;border-radius:14px;padding:8px 10px;backdrop-filter:blur(6px)}
-    .cred img{width:44px;height:44px;border-radius:999px;object-fit:cover;border:1px solid #233046}
+    .cred{position:absolute;right:-10px;bottom:-10px;display:flex;align-items:center;gap:10px;background:#ffffff;border:1px solid var(--border);border-radius:14px;padding:8px 10px;box-shadow:0 8px 20px rgba(0,0,0,.08)}
+    .cred img{width:44px;height:44px;border-radius:999px;object-fit:cover;border:1px solid var(--border)}
     .cred .t1{font-weight:700;font-size:13px}
-    .cred .t2{font-size:12px;color:#c7d2fe}
-    .badge{display:inline-block;background:rgba(16,185,129,.12);border:1px solid rgba(34,211,238,.25);color:#c7f9ff;padding:6px 10px;border-radius:999px;font-size:12px;margin-bottom:10px}
+    .cred .t2{font-size:12px;color:#334155}
+    .badge{display:inline-block;background:#ecfdf5;border:1px solid #bbf7d0;color:#14532d;padding:6px 10px;border-radius:999px;font-size:12px;margin-bottom:10px}
     h1{font-size:40px;line-height:1.1;margin:6px 0 12px}
-    h2{font-size:28px;margin:28px 0 12px}
-    p{margin:8px 0;color:#dbe3f0}
+    h2{font-size:28px;margin:24px 0 12px}
+    p{margin:8px 0;color:#1f2937}
     .muted{color:var(--muted)}
     .cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
     .btn{cursor:pointer;border:0;border-radius:12px;padding:12px 16px;font-weight:700}
-    .btn-primary{background:linear-gradient(90deg,var(--brand) 0%, var(--brand-2) 100%);color:#00110e}
-    .btn-ghost{background:transparent;border:1px solid #2b3446;color:#dce7f7}
-    .panel{background:linear-gradient(180deg,#0f172a 0%, #0c1426 100%); border:1px solid #1e293b; border-radius:16px; padding:18px}
+    .btn-primary{background:linear-gradient(90deg,var(--brand) 0%, var(--brand-2) 100%);color:#ffffff}
+    .btn-ghost{background:#ffffff;border:1px solid var(--border);color:#0f172a}
+    .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:0 6px 16px rgba(0,0,0,.06)}
     .cols{display:grid;gap:18px;grid-template-columns:repeat(3,1fr)}
     .cols-2{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
     ul{margin:8px 0 0 18px}
     .chipbar{display:flex;gap:10px;flex-wrap:wrap}
-    .chip{border:1px solid #2b3446;border-radius:999px;padding:8px 12px;cursor:pointer}
-    .chip.active{border-color:var(--brand); background:rgba(16,185,129,.1)}
+    .chip{border:1px solid var(--border);border-radius:999px;padding:8px 12px;cursor:pointer;background:#fff}
+    .chip.active{border-color:#86efac;background:#f0fff4}
     .price{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
     .price .title{font-weight:800;font-size:18px}
-    footer{margin:30px 0 10px;color:var(--muted);font-size:14px}
+    footer{margin:30px 0 10px;color:#334155;font-size:14px;text-align:center}
     input,select,button{font:inherit}
     .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-    .field input{background:#0b1428;border:1px solid #243045;color:#e6eefc;border-radius:10px;padding:10px}
-    .calc-out{background:#0b1428;border:1px dashed #334155;border-radius:12px;padding:14px;margin-top:10px}
+    .field input,.field select{background:#fff;border:1px solid var(--border);color:var(--ink);border-radius:10px;padding:10px}
+    .input-prefix{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;background:#fff;overflow:hidden}
+    .input-prefix span{padding:10px 12px;background:#f8fafc;border-right:1px solid var(--border);color:#334155}
+    .input-prefix input{border:0;outline:none;flex:1;padding:10px}
+    .calc-out{background:#fff;border:1px dashed var(--border);border-radius:12px;padding:14px;margin-top:10px}
     .tiny{font-size:12px;color:var(--muted)}
-    .faq details{background:#0b1428;border:1px solid #243045;border-radius:12px;padding:12px;margin:8px 0}
+    .faq details{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;margin:8px 0}
     .center{text-align:center}
-    .mark{color:#fff;background:linear-gradient(90deg,rgba(16,185,129,.25),rgba(34,211,238,.2));padding:2px 6px;border-radius:6px}
+    .mark{color:#1f2937;background:linear-gradient(90deg,#fef3c7,#fafaf9);padding:2px 6px;border-radius:6px;border:1px solid #fde68a}
+    .logo-footer{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px}
+    .logo-footer img{height:32px;width:auto}
     @media (max-width:900px){
       header{grid-template-columns:1fr}
       .cred{right:8px;bottom:8px}
@@ -57,6 +75,12 @@
 </head>
 <body>
   <div class="wrap">
+    <!-- small brand row -->
+    <div class="brandbar">
+      <img src="shylock_logo.png" alt="Shylock Online logo">
+      <button class="btn-mini" id="miniJoin">Get Early Access</button>
+    </div>
+
     <!-- HERO -->
     <header>
       <div>
@@ -117,7 +141,10 @@
         <div>
           <div class="field">
             <label>Current balance</label>
-            <input type="number" id="bal" value="10000" min="0" step="0.01">
+            <div class="input-prefix">
+              <span>$</span>
+              <input type="text" id="bal" value="10000.00" inputmode="decimal" autocomplete="off">
+            </div>
           </div>
           <div class="field">
             <label>Annual interest rate (%)</label>
@@ -133,7 +160,10 @@
           </div>
           <div class="field">
             <label>Payment amount</label>
-            <input type="number" id="payAmt" value="500" min="0" step="0.01">
+            <div class="input-prefix">
+              <span>$</span>
+              <input type="text" id="payAmt" value="500.00" inputmode="decimal" autocomplete="off">
+            </div>
           </div>
           <div class="cta-row">
             <button class="btn btn-primary" id="calcBtn">Calculate Split</button>
@@ -191,7 +221,6 @@
     <section class="panel" id="waitlist">
       <h2>Be one of the first to try Shylock Online</h2>
       <form id="leadForm" method="POST" action="FORM_ACTION">
-        <!-- Replace FORM_ACTION with your Formspree/Tally endpoint; otherwise we'll just log to console -->
         <div class="cols-2">
           <div class="field">
             <label>Your name</label>
@@ -227,8 +256,11 @@
       <details><summary>Why not just use Quicken?</summary><div>Quicken can handle loans when <em>you’re the borrower</em>, but not when <em>you’re the lender</em> and need interest-first splits. Shylock fills that gap.</div></details>
     </section>
 
-    <footer class="center">
-      <p>© <span id="yr"></span> Shylock Online · <a href="#" aria-disabled="true">Privacy</a> · <a href="#" aria-disabled="true">Terms</a></p>
+    <footer>
+      <div class="logo-footer">
+        <img src="shylock_online_sq.png" alt="Shylock Online mark">
+        <span>© <span id="yr"></span> Shylock Online · <a href="#" aria-disabled="true">Privacy</a> · <a href="#" aria-disabled="true">Terms</a></span>
+      </div>
       <p class="tiny">“Private loan tracking, done right.”</p>
     </footer>
   </div>
@@ -244,6 +276,9 @@
     });
     document.getElementById('ctaJoin').addEventListener('click', () => {
       document.getElementById('waitlist').scrollIntoView({behavior:'smooth'}); logEvt('cta_waitlist',{});
+    });
+    document.getElementById('miniJoin').addEventListener('click', () => {
+      document.getElementById('waitlist').scrollIntoView({behavior:'smooth'}); logEvt('cta_waitlist_top',{});
     });
 
     // Segment chips
@@ -265,18 +300,31 @@
     lastDate.value = todayISO;
     payDate.value  = todayISO;
 
+    // Currency helpers
+    function parseMoney(v){ const n = Number(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n) ? 0 : n; }
+    function formatMoney(n){ return n.toLocaleString('en-US',{style:'currency', currency:'USD'}); }
+    function attachMoneyBehavior(id){
+      const el = document.getElementById(id);
+      // format on load
+      el.value = el.value ? formatMoney(parseMoney(el.value)) : formatMoney(0);
+      el.addEventListener('focus', ()=>{ el.value = String(parseMoney(el.value)); });
+      el.addEventListener('blur',  ()=>{ el.value = formatMoney(parseMoney(el.value)); });
+    }
+    attachMoneyBehavior('bal');
+    attachMoneyBehavior('payAmt');
+
     function daysBetween(aISO,bISO){
       const a = new Date(aISO+"T00:00:00"); const b = new Date(bISO+"T00:00:00");
       return Math.max(0, Math.round((b - a) / (1000*60*60*24)));
     }
 
     document.getElementById('calcBtn').addEventListener('click', ()=>{
-      const bal   = Math.max(0, parseFloat(document.getElementById('bal').value||0));
+      const bal   = Math.max(0, parseMoney(document.getElementById('bal').value));
       const rate  = Math.max(0, parseFloat(document.getElementById('rate').value||0))/100;
       const d1    = lastDate.value;
       const d2    = payDate.value;
       const days  = daysBetween(d1,d2);
-      const pay   = Math.max(0, parseFloat(document.getElementById('payAmt').value||0));
+      const pay   = Math.max(0, parseMoney(document.getElementById('payAmt').value));
 
       const accrued = +(bal * rate * (days/365)).toFixed(2);
       const interestPaid = Math.min(pay, accrued);
@@ -287,13 +335,13 @@
         <div><strong>Payment split for ${d2}</strong></div>
         <ul>
           <li>Days since last balance: <strong>${days}</strong></li>
-          <li>Accrued interest: <strong>$${accrued.toLocaleString()}</strong></li>
-          <li>From your payment ($${pay.toLocaleString()}):</li>
+          <li>Accrued interest: <strong>${formatMoney(accrued)}</strong></li>
+          <li>From your payment (${formatMoney(pay)}):</li>
           <ul>
-            <li><strong>$${interestPaid.toLocaleString()}</strong> to interest</li>
-            <li><strong>$${principalPaid.toLocaleString()}</strong> to principal</li>
+            <li><strong>${formatMoney(interestPaid)}</strong> to interest</li>
+            <li><strong>${formatMoney(principalPaid)}</strong> to principal</li>
           </ul>
-          <li>New balance: <strong>$${newBal.toLocaleString()}</strong></li>
+          <li>New balance: <strong>${formatMoney(newBal)}</strong></li>
         </ul>
         <p class="tiny muted">Want the full schedule and a PDF statement? Join Early Access below.</p>
       `;
