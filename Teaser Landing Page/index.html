@@ -3,33 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shylock Online — Private Loan Tracking That Actually Works</title>
+  <title>Shylock Online — Easy Loan Tracking for Private Lenders</title>
   <meta name="description" content="Track private loans to family and friends the right way. Each payment split correctly—interest first, then principal. Free for one loan." />
   <style>
-    /* Light, trust-first palette */
     :root{
-      --bg1:#f8fafc;      /* near-white */
-      --bg2:#eef2f7;      /* soft gray-blue */
-      --panel:#ffffff;    /* cards */
-      --ink:#0f172a;      /* slate-900 text */
-      --muted:#556581;    /* slate-500/600 */
-      --border:#e5e7eb;   /* light borders */
-      --brand:#16a34a;    /* emerald */
-      --brand-2:#0ea5e9;  /* sky */
-      --accent:#d4a017;   /* warm gold to echo scales */
+      --bg1:#f8fafc;
+      --bg2:#eef2f7;
+      --panel:#ffffff;
+      --ink:#0f172a;
+      --muted:#556581;
+      --border:#e5e7eb;
+      --brand:#16a34a;
+      --brand-2:#0ea5e9;
+      --accent:#d4a017;
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:linear-gradient(180deg,var(--bg1) 0%, var(--bg2) 100%); color:var(--ink); font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial}
     a{color:#075985;text-decoration:none}
     .wrap{max-width:1100px;margin:0 auto;padding:24px}
-    /* Tiny top brand row */
-    .brandbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .brandbar img{height:36px;width:auto}
-    .brandbar .btn-mini{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;font-weight:600;color:#0f172a;cursor:pointer}
+
+    /* brand */
+    .brandbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .brand-left{display:flex;align-items:center;gap:12px}
+    .brandbar img{height:100px;width:auto}
+    .brand-title{font-weight:800;font-size:20px;color:#0f172a}
+    .brandbar .btn-mini{border:1px solid var(--border);background:#fff;border-radius:10px;padding:10px 14px;font-weight:700;color:#0f172a;cursor:pointer}
+
+    /* hero */
     header{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;padding:10px 0 6px}
     header .photo-wrap{position:relative}
     header img.hero{width:100%;height:auto;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.10)}
-    /* Lawyer inset badge */
     .cred{position:absolute;right:-10px;bottom:-10px;display:flex;align-items:center;gap:10px;background:#ffffff;border:1px solid var(--border);border-radius:14px;padding:8px 10px;box-shadow:0 8px 20px rgba(0,0,0,.08)}
     .cred img{width:44px;height:44px;border-radius:999px;object-fit:cover;border:1px solid var(--border)}
     .cred .t1{font-weight:700;font-size:13px}
@@ -43,16 +46,39 @@
     .btn{cursor:pointer;border:0;border-radius:12px;padding:12px 16px;font-weight:700}
     .btn-primary{background:linear-gradient(90deg,var(--brand) 0%, var(--brand-2) 100%);color:#ffffff}
     .btn-ghost{background:#ffffff;border:1px solid var(--border);color:#0f172a}
-    .panel{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:0 6px 16px rgba(0,0,0,.06)}
+
+    /* cards */
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:18px;
+      box-shadow:0 12px 28px rgba(0,0,0,.12);
+      transition:transform .18s ease, box-shadow .18s ease;
+    }
+    .panel:hover{
+      transform:translateY(-2px);
+      box-shadow:0 18px 38px rgba(0,0,0,.14);
+    }
     .cols{display:grid;gap:18px;grid-template-columns:repeat(3,1fr)}
     .cols-2{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
     ul{margin:8px 0 0 18px}
+
+    /* chips */
     .chipbar{display:flex;gap:10px;flex-wrap:wrap}
     .chip{border:1px solid var(--border);border-radius:999px;padding:8px 12px;cursor:pointer;background:#fff}
     .chip.active{border-color:#86efac;background:#f0fff4}
+
+    /* pricing grid */
     .price{display:grid;gap:18px;grid-template-columns:repeat(2,1fr)}
     .price .title{font-weight:800;font-size:18px}
+
+    /* footer */
     footer{margin:30px 0 10px;color:#334155;font-size:14px;text-align:center}
+    .logo-footer{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px}
+    .logo-footer img{height:32px;width:auto}
+
+    /* form + calculator */
     input,select,button{font:inherit}
     .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
     .field input,.field select{background:#fff;border:1px solid var(--border);color:var(--ink);border-radius:10px;padding:10px}
@@ -64,20 +90,26 @@
     .faq details{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;margin:8px 0}
     .center{text-align:center}
     .mark{color:#1f2937;background:linear-gradient(90deg,#fef3c7,#fafaf9);padding:2px 6px;border-radius:6px;border:1px solid #fde68a}
-    .logo-footer{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:10px}
-    .logo-footer img{height:32px;width:auto}
+
     @media (max-width:900px){
       header{grid-template-columns:1fr}
       .cred{right:8px;bottom:8px}
     }
-    @media (max-width:760px){ .cols{grid-template-columns:1fr} .cols-2{grid-template-columns:1fr} .price{grid-template-columns:1fr}}
+    @media (max-width:760px){
+      .cols{grid-template-columns:1fr}
+      .cols-2{grid-template-columns:1fr}
+      .price{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <!-- small brand row -->
+    <!-- brand bar -->
     <div class="brandbar">
-      <img src="shylock_logo.png" alt="Shylock Online logo">
+      <div class="brand-left">
+        <img src="shylock_logo.png" alt="Shylock Online logo">
+        <div class="brand-title">Shylock Online — Easy Loan Tracking for Private Lenders</div>
+      </div>
       <button class="btn-mini" id="miniJoin">Get Early Access</button>
     </div>
 
@@ -85,10 +117,10 @@
     <header>
       <div>
         <span class="badge">Built for family & friends loans — not big banks</span>
-        <h1>Tracking a private loan shouldn’t be this hard.</h1>
+        <h1>Tracking private loan interest and principal reduction shouldn’t be this hard!</h1>
         <p>
           <strong>Founder’s note:</strong> “Even as a retired trial lawyer with four decades of experience, I ran into a nightmare after I loaned my sister money to buy a house.
-          I couldn’t find a single tool that would split each payment correctly — <span class="mark">interest first, then principal</span>. Not even Quicken could do it. So I built Shylock Online.”
+          I couldn’t find a single tool that would split each payment correctly — <span class="mark">interest first, then principal</span>. Not even Quicken could do it. So I built Shylock Online, the website and phone app that make it simple.”
         </p>
         <p><strong>Shylock</strong> makes private loan tracking simple: enter payments, and we handle the math — every time.</p>
         <div class="cta-row">
@@ -305,7 +337,6 @@
     function formatMoney(n){ return n.toLocaleString('en-US',{style:'currency', currency:'USD'}); }
     function attachMoneyBehavior(id){
       const el = document.getElementById(id);
-      // format on load
       el.value = el.value ? formatMoney(parseMoney(el.value)) : formatMoney(0);
       el.addEventListener('focus', ()=>{ el.value = String(parseMoney(el.value)); });
       el.addEventListener('blur',  ()=>{ el.value = formatMoney(parseMoney(el.value)); });
